@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { type Page, expect, test } from '@playwright/test'
 
 // Live: the built SDK on a test page, against the real API. Needs DEVREPLY_TEST_PK (a throwaway app's
@@ -161,5 +162,26 @@ test('the published script works from another site, fonts included @smoke', asyn
     return [...document.fonts].filter((f) => f.family.includes('DevReply') && f.status === 'loaded').length
   })
   expect(loaded).toBe(2)
-  expect(await page.evaluate(() => window.DevReply?.version)).toBe('0.3.0')
+  expect(await page.evaluate(() => window.DevReply?.version)).toBe(JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version)
+})
+
+test('a long chat: every new message shows at the bottom, above the composer @smoke', async ({ page }) => {
+  await load(page)
+  await startNew(page, 'bug', `Long test ${nonce} 1`)
+  await page.getByTestId('devreply.emailask.skip').click().catch(() => undefined)
+  const composer = page.getByTestId('devreply.composer')
+  for (let i = 2; i <= 12; i++) {
+    await composer.fill(`Long test ${nonce} ${i}`)
+    await page.getByTestId('devreply.send').click()
+    const msg = page.getByText(`Long test ${nonce} ${i}`, { exact: true })
+    await expect(msg).toBeInViewport({ ratio: 1 })
+    const box = await msg.boundingBox()
+    const top = (await composer.boundingBox())!.y
+    expect(box!.y + box!.height).toBeLessThanOrEqual(top)
+  }
+  // Sent in the order typed, even when sent quickly (the server's order, after a reload of the thread).
+  await page.waitForTimeout(3500)
+  const texts = await page.locator('.bubble.me').allInnerTexts()
+  const mine = texts.filter((t) => t.startsWith(`Long test ${nonce} `)).map((t) => Number(t.split(' ').pop()))
+  expect(mine).toEqual([...mine].sort((a, b) => a - b))
 })

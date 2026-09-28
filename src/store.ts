@@ -331,13 +331,20 @@ export class ConversationModel {
     this.pending = [...this.pending, item]
     this.sentCount++
     this.emit()
-    void this.deliver(item)
+    this.enqueue(item)
   }
 
   retry(item: Pending) {
     this.pending = this.pending.map((p) => (p.id === item.id ? { ...p, failure: null } : p))
     this.emit()
-    void this.deliver(item)
+    this.enqueue(item)
+  }
+
+  /** Sends go out one at a time, in the order typed: two in flight could reach the server swapped. */
+  private queue: Promise<void> = Promise.resolve()
+
+  private enqueue(item: Pending) {
+    this.queue = this.queue.then(() => this.deliver(item))
   }
 
   private async deliver(item: Pending) {

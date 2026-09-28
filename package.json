@@ -1,6 +1,6 @@
 {
   "name": "@devreply/web",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "DevReply for web apps: the in-app chat between your users and you. One script, no dependencies on the page.",
   "license": "MIT",
   "private": true,

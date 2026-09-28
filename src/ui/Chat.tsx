@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { type Category, DEFAULT_TITLES, DevReplyError, type Message, type Outgoing } from '../api'
 import { ConversationModel, type Pending, store } from '../store'
 import { Avatar, CategoryIcon, Icon, IconButton, PROMPTS, fileSize, useStore, useSubscribe } from './parts'
@@ -48,6 +48,16 @@ export function Chat({ conversationId, category }: { conversationId: string | nu
   }, [model, model.conversationId])
 
   const list = items(model)
+
+  // Newest at the bottom (column-reverse: scrollTop 0 is the bottom). Browsers don't all keep it there
+  // when something is added (WebKit doesn't), so if the user is at the bottom, it stays there; if
+  // they scrolled up into the history, it leaves them where they are.
+  const thread = useRef<HTMLDivElement>(null)
+  const atBottom = useRef(true)
+  const newest = list[list.length - 1]?.key
+  useLayoutEffect(() => {
+    if (atBottom.current && thread.current) thread.current.scrollTop = 0
+  }, [newest, list.length])
   const cat = model.category ?? 'other'
   const title = s.config.startButtons.find((b) => b.category === cat)?.title ?? DEFAULT_TITLES[cat]
   const showsEmailAsk =
@@ -87,7 +97,16 @@ export function Chat({ conversationId, category }: { conversationId: string | nu
           <p>{PROMPTS[cat]}</p>
         </div>
       ) : (
-        <div class="thread" onTouchStart={onTouchStart} onTouchMove={onTouchMove} aria-live="polite">
+        <div
+          ref={thread}
+          class="thread"
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onScroll={(e) => {
+            atBottom.current = Math.abs((e.currentTarget as HTMLDivElement).scrollTop) < 60
+          }}
+          aria-live="polite"
+        >
           <div class="thread-inner">
             {list.map((it) =>
               it.kind === 'time' ? (
