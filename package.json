@@ -1,0 +1,21 @@
+{
+  "name": "@devreply/web",
+  "version": "0.3.0",
+  "description": "DevReply for web apps: the in-app chat between your users and you. One script, no dependencies on the page.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "preact": "^10.29.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  }
+}

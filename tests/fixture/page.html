@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Fox Notes</title>
+  <!-- A host page with rude CSS: none of it may reach the chat (it lives in a shadow root). -->
+  <style>
+    * { font-family: "Comic Sans MS", cursive !important; color: #0a0 !important; }
+    button { background: red !important; border-radius: 40px !important; }
+    body { margin: 0; padding: 32px; background: #eef; }
+  </style>
+</head>
+<body>
+  <h1>Fox Notes</h1>
+  <p>A web app that uses DevReply.</p>
+  <button id="help" onclick="DevReply.open('bug')">Report a bug</button>
+  <p>Unread: <span id="unread">0</span></p>
+  <script>
+    // The same tag a site adds, built from the query: ?key=pk_…&launcher=unread
+    const q = new URLSearchParams(location.search)
+    const s = document.createElement('script')
+    s.src = q.get('src') || '/dist/devreply.js'
+    s.async = true
+    s.dataset.key = q.get('key') || ''
+    if (q.get('launcher')) s.dataset.launcher = q.get('launcher')
+    document.body.appendChild(s)
+    addEventListener('devreply:ready', () => DevReply.onUnreadChange((n) => (document.getElementById('unread').textContent = n)))
+  </script>
+</body>
+</html>

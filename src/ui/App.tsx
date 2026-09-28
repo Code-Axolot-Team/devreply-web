@@ -1,0 +1,92 @@
+import { useEffect, useRef } from 'preact/hooks'
+import { store } from '../store'
+import { Chat } from './Chat'
+import { Home } from './Home'
+import { Icon, useStore } from './parts'
+
+/**
+ * The launcher (bottom right, with the unread count) and the messenger panel above it. On a phone the
+ * panel takes the whole screen. The launcher shows always (`always`, the default on the web), only
+ * while a reply is waiting (`unread`, like the mobile SDKs' bubble), or never (`none`: the site opens
+ * the chat from its own button with `DevReply.open()`).
+ */
+export function App({ themeStyle }: { themeStyle: string }) {
+  const s = useStore()
+  const unread = s.unreadCount
+  const team = s.config.teamName || 'the team'
+  const showsLauncher = s.launcher === 'always' || (s.launcher === 'unread' && (unread > 0 || s.isOpen))
+  const launcher = useRef<HTMLButtonElement>(null)
+  const panel = useRef<HTMLDivElement>(null)
+  const route = s.route[s.route.length - 1] ?? { screen: 'home' }
+
+  // Opening moves focus into the panel; closing brings it back to the launcher.
+  // Escape closes it, wherever focus is.
+  useEffect(() => {
+    if (!s.isOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') store.close()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [s.isOpen])
+
+  const wasOpen = useRef(false)
+  useEffect(() => {
+    if (s.isOpen && !wasOpen.current) panel.current?.querySelector<HTMLElement>('button, input, textarea')?.focus()
+    if (!s.isOpen && wasOpen.current) launcher.current?.focus()
+    wasOpen.current = s.isOpen
+  }, [s.isOpen])
+
+  const label = s.isOpen
+    ? 'Close the chat'
+    : unread === 1
+      ? `New reply from ${team}`
+      : unread > 1
+        ? `${unread} new replies from ${team}`
+        : `Chat with ${team}`
+
+  return (
+    <div class={`dr ${s.isOpen ? 'open' : ''}`} style={themeStyle}>
+      {s.isOpen && (
+        <div
+          ref={panel}
+          class="panel"
+          role="dialog"
+          aria-label={`Chat with ${team}`}
+          data-testid="devreply.panel"
+        >
+          {route.screen === 'home' ? (
+            <Home />
+          ) : (
+            <Chat key={`${route.conversationId ?? 'new'}-${route.category ?? ''}`} conversationId={route.conversationId} category={route.category} />
+          )}
+        </div>
+      )}
+      {showsLauncher && (
+        <button
+          ref={launcher}
+          type="button"
+          class="launcher"
+          aria-label={label}
+          aria-expanded={s.isOpen}
+          data-testid="devreply.launcher"
+          onClick={() => {
+            if (s.isOpen) store.close()
+            else {
+              // With a reply waiting, straight to it.
+              const waiting = s.conversations.find((c) => c.unread > 0)
+              store.open(waiting ? { screen: 'chat', conversationId: waiting.id, category: waiting.category } : undefined)
+            }
+          }}
+        >
+          {s.isOpen ? <Icon name="close" class="x" /> : <Icon name="mark" class="mark" />}
+          {!s.isOpen && unread > 0 && (
+            <span class="badge" aria-hidden="true">
+              {unread > 9 ? '9+' : unread}
+            </span>
+          )}
+        </button>
+      )}
+    </div>
+  )
+}
