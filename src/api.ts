@@ -3,7 +3,7 @@
 
 export class DevReplyError extends Error {
   constructor(
-    readonly kind: 'unauthenticated' | 'invalidKey' | 'forbidden' | 'invalid' | 'server' | 'network' | 'unavailable',
+    readonly kind: 'unauthenticated' | 'invalidKey' | 'forbidden' | 'invalid' | 'conflict' | 'server' | 'network' | 'unavailable',
     message: string = kind,
   ) {
     super(message)
@@ -271,6 +271,7 @@ export class ApiClient {
     if (res.status === 401) throw new DevReplyError('unauthenticated', message)
     if (res.status === 403) throw new DevReplyError('forbidden', message)
     if (res.status === 400 || res.status === 422) throw new DevReplyError('invalid', message)
+    if (res.status === 409) throw new DevReplyError('conflict', message)
     if (res.status === 503) throw new DevReplyError('unavailable', message)
     throw new DevReplyError('server', message)
   }
@@ -293,6 +294,16 @@ export class ApiClient {
   }
 
   /** The app opened a DevReply link (0.4): Settings shows the deep link works. */
+  /** `DevReply.logout()`: this browser's token stops working. */
+  async logout(token: string): Promise<void> {
+    await this.send('POST', 'v1/logout', token)
+  }
+
+  /** `DevReply.deleteUser()`: the user's personal data, conversations and files are deleted. */
+  async deleteUser(token: string): Promise<void> {
+    await this.send('DELETE', 'v1/me', token)
+  }
+
   async deepLinkOpened(token: string): Promise<void> {
     await this.send('POST', 'v1/deep_link_opened', token)
   }
@@ -333,7 +344,7 @@ export class ApiClient {
 
   async updateProfile(
     token: string,
-    patch: { name?: string; email?: string; attributes?: Record<string, string | number | boolean | null> },
+    patch: { name?: string; email?: string; user_id?: string; attributes?: Record<string, string | number | boolean | null> },
   ): Promise<Profile> {
     const r = obj(await this.send('PATCH', 'v1/me', token, { attributes: {}, ...patch }))
     return { name: str(r.name), email: str(r.email) }

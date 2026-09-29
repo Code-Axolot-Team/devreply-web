@@ -126,6 +126,20 @@ export const DevReply = {
   get language(): string {
     return store.language
   },
+  /** After your user signs in: your own id for them (never an email or a secret). If someone else was
+   *  signed in in this browser, DevReply logs them out first. */
+  login(userId: string) {
+    store.login(userId)
+  },
+  /** When your user signs out: this browser forgets their chats; the next person starts empty. */
+  logout() {
+    store.logout()
+  },
+  /** When your user deletes their account: deletes their data, conversations and files from DevReply,
+   *  then logs out. Resolves to false if DevReply couldn't be reached. */
+  deleteUser(): Promise<boolean> {
+    return store.deleteUser()
+  },
   /** Who the user is, if the site knows. With a name set, the chat doesn't ask for one. */
   setUser(user: { name?: string; email?: string }) {
     store.setUser(user)

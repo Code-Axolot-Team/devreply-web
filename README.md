@@ -68,6 +68,9 @@ window.addEventListener('devreply:ready', () => {
 })
 DevReply.open()          // or open('bug')
 DevReply.close()
+DevReply.login(userId)   // signed-in users: see below
+DevReply.logout()
+DevReply.deleteUser()    // Promise<boolean>
 DevReply.handle(url)     // a DevReply link (?devreply=<id>) your router caught first: opens that conversation
 DevReply.configure({ key: 'pk_…', launcher: 'unread', theme: { primary: '#F6EB37', accent: '#FF5FA2' } })
 DevReply.configure({ key: 'pk_…', fonts: 'system' })   // no brand fonts loaded from api.devreply.com
@@ -76,6 +79,33 @@ DevReply.configure({ key: 'pk_…', fonts: 'system' })   // no brand fonts loade
 If your site sends a Content-Security-Policy: `script-src` and `font-src https://api.devreply.com`,
 `connect-src https://api.devreply.com https://storage.googleapis.com`,
 `img-src https://api.devreply.com https://storage.googleapis.com blob:` (team photos and your app icon).
+
+## Sign-in, sign-out and account deletion
+
+If your app has accounts:
+
+```js
+DevReply.login(user.id)                // after sign-in: your own id for the user, never an email or a secret
+DevReply.logout()                      // on every sign-out and account switch
+const ok = await DevReply.deleteUser() // in your delete-account flow; false if DevReply couldn't be reached
+```
+
+- `login` labels the user for your team (the dashboard shows it as "User ID (your app)") and lets your backend
+  delete them by it. It doesn't merge chats across browsers: the id isn't verified, so it never gives one browser
+  another's conversations. If another id was signed in on this browser, DevReply logs out first.
+- `logout` revokes this install and its push token; the browser forgets the chat and the next person starts empty.
+  The conversations stay with your team.
+- `deleteUser` deletes the user's name, email, attributes, conversations, messages and files, then logs out.
+
+Your backend can delete a user too, with a read-and-write secret key (never in an app):
+
+```sh
+curl -X DELETE "https://api.devreply.com/v1/project/users?user_id=<your id>" \
+  -H "Authorization: Bearer $DEVREPLY_SECRET_KEY"
+# {"deleted": 1}: every DevReply user with that id, on every device. ?id=<DevReply's user id> for one user.
+```
+
+Your team can also delete a user in the dashboard (the inbox's user panel → Delete user).
 
 ## Build and test
 

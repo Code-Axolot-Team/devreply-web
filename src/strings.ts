@@ -2,7 +2,7 @@
 
 export const LANGUAGES = ["en", "de", "el", "es", "fr", "it", "ja", "ko", "nl", "pl", "pt-BR", "ru", "tr", "uk", "zh-Hans"] as const
 export type Language = (typeof LANGUAGES)[number]
-export type StringKey = "greeting" | "intro" | "start_title" | "your_conversations" | "category.bug" | "category.billing" | "category.idea" | "category.question" | "category.other" | "prompt.bug" | "prompt.billing" | "prompt.idea" | "prompt.question" | "prompt.other" | "reply_time.hour" | "reply_time.hours" | "reply_time.day" | "reply_time.2_days" | "reply_time.3_working_days" | "reply_time.week" | "reply_allow.hour" | "reply_allow.hours" | "reply_allow.day" | "reply_allow.2_days" | "reply_allow.3_working_days" | "reply_allow.week" | "notice.title" | "notice.email" | "notice.here" | "name.kicker" | "name.text" | "name.placeholder" | "email.optional" | "name.start" | "saving" | "save" | "error.save" | "email_ask.title" | "email_ask.text" | "email_ask.placeholder" | "no_thanks" | "composer.placeholder" | "composer.label" | "send" | "attach" | "remove_attachment" | "sending" | "uploading" | "failed.attachments" | "failed.offline" | "failed.reason" | "failed.generic" | "too_big" | "too_many" | "unreadable_file" | "photo" | "open_photo" | "close_photo" | "file" | "file_named" | "unsupported" | "back" | "close" | "chat" | "you" | "team" | "resolved" | "system.resolved" | "error.offline" | "error.key" | "error.generic" | "try_again" | "powered" | "launcher.open" | "launcher.close" | "launcher.one" | "launcher.many" | "bubble.open" | "banner.new_reply" | "banner.opens" | "push.title" | "push.text" | "push.turn_on" | "push.not_now" | "push.off_title" | "push.off_text" | "push.open_settings" | "a11y.unread"
+export type StringKey = "greeting" | "intro" | "start_title" | "your_conversations" | "category.bug" | "category.billing" | "category.idea" | "category.question" | "category.other" | "prompt.bug" | "prompt.billing" | "prompt.idea" | "prompt.question" | "prompt.other" | "reply_time.hour" | "reply_time.hours" | "reply_time.day" | "reply_time.2_days" | "reply_time.3_working_days" | "reply_time.week" | "reply_allow.hour" | "reply_allow.hours" | "reply_allow.day" | "reply_allow.2_days" | "reply_allow.3_working_days" | "reply_allow.week" | "notice.title" | "notice.email" | "notice.here" | "name.kicker" | "name.text" | "name.placeholder" | "email.optional" | "name.start" | "saving" | "save" | "error.save" | "email_ask.title" | "email_ask.text" | "email_ask.placeholder" | "no_thanks" | "composer.placeholder" | "composer.label" | "send" | "attach" | "remove_attachment" | "sending" | "uploading" | "failed.attachments" | "failed.offline" | "failed.reason" | "failed.generic" | "too_big" | "too_many" | "unreadable_file" | "photo" | "open_photo" | "close_photo" | "file" | "file_named" | "unsupported" | "back" | "close" | "chat" | "you" | "team" | "resolved" | "system.resolved" | "error.offline" | "error.key" | "error.generic" | "try_again" | "powered" | "launcher.open" | "launcher.close" | "launcher.one" | "launcher.many" | "bubble.open" | "banner.new_reply" | "banner.opens" | "push.title" | "push.text" | "push.turn_on" | "push.not_now" | "push.off_title" | "push.off_text" | "push.open_settings" | "push.channel" | "a11y.unread"
 
 export const STRINGS: Record<Language, Record<StringKey, string>> = {
   "en": {
@@ -93,6 +93,7 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_title": "Notifications are off",
     "push.off_text": "Turn them on in Settings so you see when {team} answers.",
     "push.open_settings": "Open Settings",
+    "push.channel": "Replies",
     "a11y.unread": "{count} unread"
   },
   "de": {
@@ -183,6 +184,7 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_title": "Mitteilungen sind aus",
     "push.off_text": "Schalte sie in den Einstellungen ein, damit du siehst, wenn {team} antwortet.",
     "push.open_settings": "Einstellungen öffnen",
+    "push.channel": "Antworten",
     "a11y.unread": "{count} ungelesen"
   },
   "el": {
@@ -273,6 +275,7 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_title": "Οι ειδοποιήσεις είναι απενεργοποιημένες",
     "push.off_text": "Ενεργοποίησέ τες στις Ρυθμίσεις για να βλέπεις πότε απαντά {team}.",
     "push.open_settings": "Άνοιγμα Ρυθμίσεων",
+    "push.channel": "Απαντήσεις",
     "a11y.unread": "Μη αναγνωσμένα: {count}"
   },
   "es": {
@@ -363,6 +366,7 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_title": "Las notificaciones están desactivadas",
     "push.off_text": "Actívalas en Ajustes para saber cuándo responde {team}.",
     "push.open_settings": "Abrir Ajustes",
+    "push.channel": "Respuestas",
     "a11y.unread": "{count} sin leer"
   },
   "fr": {
@@ -453,6 +457,7 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_title": "Les notifications sont désactivées",
     "push.off_text": "Activez-les dans Réglages pour voir quand {team} répond.",
     "push.open_settings": "Ouvrir Réglages",
+    "push.channel": "Réponses",
     "a11y.unread": "{count} non lus"
   },
   "it": {
@@ -543,6 +548,7 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_title": "Le notifiche sono disattivate",
     "push.off_text": "Attivale nelle Impostazioni per sapere quando {team} risponde.",
     "push.open_settings": "Apri Impostazioni",
+    "push.channel": "Risposte",
     "a11y.unread": "{count} da leggere"
   },
   "ja": {
@@ -633,6 +639,7 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_title": "通知がオフになっています",
     "push.off_text": "{team} の返信が分かるよう、設定で通知をオンにしてください。",
     "push.open_settings": "設定を開く",
+    "push.channel": "返信",
     "a11y.unread": "未読 {count} 件"
   },
   "ko": {
@@ -723,6 +730,7 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_title": "알림이 꺼져 있어요",
     "push.off_text": "{team}의 답장을 확인하려면 설정에서 알림을 켜세요.",
     "push.open_settings": "설정 열기",
+    "push.channel": "답장",
     "a11y.unread": "읽지 않음 {count}개"
   },
   "nl": {
@@ -813,6 +821,7 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_title": "Meldingen staan uit",
     "push.off_text": "Zet ze aan in Instellingen, zodat je ziet wanneer {team} antwoordt.",
     "push.open_settings": "Instellingen openen",
+    "push.channel": "Antwoorden",
     "a11y.unread": "{count} ongelezen"
   },
   "pl": {
@@ -903,6 +912,7 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_title": "Powiadomienia są wyłączone",
     "push.off_text": "Włącz je w Ustawieniach, aby wiedzieć, kiedy odpowie {team}.",
     "push.open_settings": "Otwórz Ustawienia",
+    "push.channel": "Odpowiedzi",
     "a11y.unread": "Nieprzeczytane: {count}"
   },
   "pt-BR": {
@@ -993,6 +1003,7 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_title": "As notificações estão desativadas",
     "push.off_text": "Ative-as nos Ajustes para saber quando {team} responder.",
     "push.open_settings": "Abrir Ajustes",
+    "push.channel": "Respostas",
     "a11y.unread": "{count} não lidas"
   },
   "ru": {
@@ -1083,6 +1094,7 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_title": "Уведомления выключены",
     "push.off_text": "Включите их в Настройках, чтобы видеть, когда отвечает {team}.",
     "push.open_settings": "Открыть Настройки",
+    "push.channel": "Ответы",
     "a11y.unread": "Непрочитанные: {count}"
   },
   "tr": {
@@ -1173,6 +1185,7 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_title": "Bildirimler kapalı",
     "push.off_text": "{team} yanıt verdiğinde görmek için Ayarlar'dan aç.",
     "push.open_settings": "Ayarlar'ı aç",
+    "push.channel": "Yanıtlar",
     "a11y.unread": "{count} okunmamış"
   },
   "uk": {
@@ -1263,6 +1276,7 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_title": "Сповіщення вимкнено",
     "push.off_text": "Увімкніть їх у Параметрах, щоб бачити, коли відповідає {team}.",
     "push.open_settings": "Відкрити Параметри",
+    "push.channel": "Відповіді",
     "a11y.unread": "Непрочитані: {count}"
   },
   "zh-Hans": {
@@ -1353,6 +1367,7 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_title": "通知已关闭",
     "push.off_text": "在设置中打开通知，就能在 {team} 回复时看到。",
     "push.open_settings": "打开设置",
+    "push.channel": "回复",
     "a11y.unread": "{count} 条未读"
   }
 }

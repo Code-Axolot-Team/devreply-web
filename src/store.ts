@@ -135,13 +135,22 @@ export class Store {
         /* ignore a bad cache */
       }
     }
+    // Signed in as someone else than this browser's user (the site called login before configure).
+    const stored = storage.get(this.userKey)
+    if (this.hostUserId && stored && stored !== this.hostUserId) this.forgetInstall()
     this.emit()
     void (async () => {
+      await this.sendUserId()
       if (this.hostUser) await this.saveProfile(this.hostUser).catch(() => undefined)
       await this.flushAttributes()
       await this.refresh()
     })()
     this.startPolling()
+  }
+
+  /** The app's id for the signed-in user this browser's install belongs to (`DevReply.login`). */
+  private get userKey() {
+    return `devreply:user:${this.client?.baseUrl ?? ''}|${this.publicKey ?? ''}`
   }
 
   private get tokenKey() {
@@ -227,6 +236,78 @@ export class Store {
 
   async saveProfile(patch: { name?: string; email?: string }) {
     this.profile = await this.authorized((api, t) => api.updateProfile(t, patch))
+    this.emit()
+  }
+
+  // ---- signed-in user (spec 03) ----
+
+  private hostUserId: string | null = null
+
+  login(userId: string) {
+    const id = String(userId ?? '').trim()
+    if (!id) return
+    // Another person in this browser: they start from a new, empty install.
+    const stored = this.client ? storage.get(this.userKey) : null
+    if (stored && stored !== id) this.logout()
+    this.hostUserId = id
+    if (this.client) void this.sendUserId()
+  }
+
+  /** Labels this install's user with the site's id; another id for the same user (409) means this
+   *  install belonged to someone else, so start a new one. */
+  private async sendUserId(retry = true): Promise<void> {
+    const id = this.hostUserId
+    if (!id || !this.client) return
+    try {
+      this.profile = await this.authorized((api, t) => api.updateProfile(t, { user_id: id }))
+      storage.set(this.userKey, id)
+      this.emit()
+    } catch (e) {
+      if (retry && e instanceof DevReplyError && e.kind === 'conflict') {
+        this.logout(true)
+        await this.sendUserId(false)
+      }
+    }
+  }
+
+  /** `DevReply.logout()`: the server stops accepting this install, the browser forgets it, and the next
+   *  person starts from a new, empty one. Conversations stay for the team. */
+  logout(keepUserId = false) {
+    const client = this.client
+    const token = client ? storage.get(this.tokenKey) : null
+    if (client && token) void client.logout(token).catch(() => undefined)
+    const id = this.hostUserId
+    this.forgetInstall()
+    if (keepUserId) this.hostUserId = id
+    if (this.client) void this.refresh()
+  }
+
+  /** `DevReply.deleteUser()`: deletes the user's data on the server, then forgets the install. */
+  async deleteUser(): Promise<boolean> {
+    if (!this.client) return false
+    try {
+      await this.authorized((api, t) => api.deleteUser(t))
+    } catch {
+      return false
+    }
+    this.forgetInstall()
+    void this.refresh()
+    return true
+  }
+
+  private forgetInstall() {
+    if (this.client) {
+      storage.set(this.tokenKey, null)
+      storage.set(this.userKey, null)
+    }
+    this.registering = null
+    this.hostUserId = null
+    this.hostUser = null
+    this.pendingAttributes = {}
+    this.conversations = []
+    this.profile = null
+    this.isOpen = false
+    this.visibleConversation = null
     this.emit()
   }
 
