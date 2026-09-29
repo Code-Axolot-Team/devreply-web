@@ -2,10 +2,10 @@
 // Nothing here touches the page until configure() runs in a browser, so importing it during
 // server rendering (Next.js, Remix, SvelteKit…) is safe.
 import { render } from 'preact'
-import { type Category, CATEGORIES, SDK_VERSION } from './api'
+import { type Category, CATEGORIES, SDK_VERSION, contextOf } from './api'
 import { setLocaleOverride } from './i18n'
-import { type Attribute, type LauncherMode, store } from './store'
-import { type Theme, css, fontFaces, themeVars } from './styles'
+import { type Attribute, type DevReplyEvent, type DevReplyEvents, type LauncherMode, store } from './store'
+import { type Theme, css, darkTheme, darkThemeVars, fontFaces, themeVars } from './styles'
 import { App } from './ui/App'
 
 const DEFAULT_API = 'https://api.devreply.com'
@@ -23,6 +23,9 @@ export interface Options {
   launcher?: LauncherMode
   /** Your colours. */
   theme?: Theme
+  /** Colours for when the browser prefers dark (0.4.4), e.g. DevReply's own `darkTheme` preset. Left out
+   *  (the default), the chat stays light. Colours you leave out come from the preset. */
+  darkTheme?: Theme
   /** Shown to the team as the "app version" (default: the site's hostname). */
   appVersion?: string
   /** Override only for local development. */
@@ -33,9 +36,41 @@ export interface Options {
   locale?: string
 }
 
+/** What `open` / `present` takes (0.4.4). */
+export interface OpenOptions {
+  /** Straight into a new conversation of this kind. */
+  category?: Category
+  /** Prefills the composer of the new conversation this opens (never sent by itself; the user can edit it). */
+  message?: string
+  /** Context the team sees on that new conversation only: at most 20, text, number or true/false. */
+  attributes?: Record<string, string | number | boolean>
+}
+
 let mounted = false
-let themeStyle = ''
 let useBrandFonts = true
+
+function setTheme(themes: { light?: Theme | null; dark?: Theme | null }) {
+  const next = { ...store.theme }
+  if (themes.light !== undefined) next.light = themes.light ? themeVars(themes.light) : ''
+  if (themes.dark !== undefined) next.dark = themes.dark ? darkThemeVars(themes.dark) : null
+  store.theme = next
+  store.emit()
+}
+
+/** `open()`, `open('bug')`, `open({ category, message, attributes })` or `open('bug', { message, attributes })`. */
+function open(categoryOrOptions?: Category | OpenOptions | null, more?: OpenOptions): boolean {
+  const o: OpenOptions =
+    categoryOrOptions && typeof categoryOrOptions === 'object'
+      ? categoryOrOptions
+      : { ...more, category: categoryOrOptions ?? more?.category }
+  const c = o.category && CATEGORIES.includes(o.category) ? o.category : null
+  const message = typeof o.message === 'string' && o.message.trim() ? o.message : undefined
+  const context = contextOf(o.attributes)
+  return store.open(c ? { screen: 'chat', conversationId: null, category: c } : undefined, {
+    ...(message ? { message } : {}),
+    ...(Object.keys(context).length ? { context } : {}),
+  })
+}
 
 function mount() {
   if (mounted) return
@@ -55,7 +90,7 @@ function mount() {
   root.appendChild(style)
   const container = document.createElement('div')
   root.appendChild(container)
-  render(<App themeStyle={themeStyle} />, container)
+  render(<App />, container)
 }
 
 function configure(options: Options | string) {
@@ -66,7 +101,7 @@ function configure(options: Options | string) {
     return
   }
   if (o.launcher) store.launcher = o.launcher
-  if (o.theme) themeStyle = themeVars(o.theme)
+  if (o.theme || o.darkTheme) setTheme({ light: o.theme, dark: o.darkTheme })
   if (o.fonts === 'system') useBrandFonts = false
   if (o.locale) setLocaleOverride(o.locale)
   store.configure(o.key, o.apiUrl ?? DEFAULT_API, o.appVersion)
@@ -99,11 +134,15 @@ function handle(url: string | URL, cleanAddressBar = false): boolean {
 export const DevReply = {
   version: SDK_VERSION,
   configure,
-  /** Opens the messenger. With a category, straight into a new conversation. */
-  open(category?: Category) {
-    const c = category && CATEGORIES.includes(category) ? category : null
-    store.open(c ? { screen: 'chat', conversationId: null, category: c } : undefined)
-  },
+  /**
+   * Opens the messenger. With a category, straight into a new conversation. `message` prefills that new
+   * conversation's composer (with no category: once the user picks a start button); `attributes` go with
+   * it as its context. Returns false, showing nothing, when DevReply isn't configured or the team
+   * switched the chat off (`isAvailable`).
+   */
+  open,
+  /** The same as `open`, named like the iOS and Android SDKs' `present`. */
+  present: open,
   close() {
     store.close()
   },
@@ -135,8 +174,12 @@ export const DevReply = {
   logout() {
     store.logout()
   },
-  /** When your user deletes their account: deletes their data, conversations and files from DevReply,
-   *  then logs out. Resolves to false if DevReply couldn't be reached. */
+  /**
+   * When your user deletes their account: deletes their data, conversations and files from DevReply,
+   * and this browser forgets the user (like `logout`). Resolves to true when the server deleted it now;
+   * false when it couldn't be reached (or failed): the browser has already forgotten the user, and
+   * DevReply keeps retrying the deletion on every page load and whenever the tab comes back.
+   */
   deleteUser(): Promise<boolean> {
     return store.deleteUser()
   },
@@ -148,6 +191,24 @@ export const DevReply = {
   setAttributes(attributes: Record<string, Attribute>) {
     store.setAttributes(attributes)
   },
+  /**
+   * False when DevReply isn't configured or the team switched the chat off in the dashboard: then `open`
+   * does nothing and the launcher hides. True before the first config arrives.
+   */
+  get isAvailable(): boolean {
+    return store.isAvailable
+  },
+  /**
+   * For your analytics: `open`, `close`, `conversationStarted` ({ conversationId, category }) and
+   * `messageSent` ({ conversationId }, after the server accepted it). Returns a function that stops it.
+   */
+  on<E extends DevReplyEvent>(event: E, fn: (payload: DevReplyEvents[E]) => void): () => void {
+    return store.on(event, fn)
+  },
+  /** Changes the colours at any time: `light` (null: DevReply's), `dark` (null: stays light). */
+  setTheme,
+  /** DevReply's own dark palette, for `configure({ key, darkTheme: DevReply.darkTheme })`. */
+  darkTheme,
   /** Unread replies from the team. */
   get unreadCount() {
     return store.unreadCount

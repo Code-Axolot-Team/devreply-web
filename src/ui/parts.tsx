@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'preact/hooks'
-import { icons, type IconName } from '../icons'
+import { createContext } from 'preact'
+import { useContext, useEffect, useState } from 'preact/hooks'
+import { icons, iconsDark, type IconName } from '../icons'
 import type { Category, Config, StartButton } from '../api'
 import { intlLocale, t } from '../i18n'
 import type { StringKey } from '../strings'
@@ -8,7 +9,11 @@ import { store } from '../store'
 /** Re-renders when the store (or a model) changes. */
 export function useSubscribe(source: { subscribe(fn: () => void): () => void }) {
   const [, setTick] = useState(0)
-  useEffect(() => source.subscribe(() => setTick((x) => x + 1)), [source])
+  useEffect(() => {
+    const stop = source.subscribe(() => setTick((x) => x + 1))
+    setTick((x) => x + 1) // a change between the first render and now (e.g. setTheme on devreply:ready)
+    return stop
+  }, [source])
 }
 
 export function useStore() {
@@ -16,16 +21,22 @@ export function useStore() {
   return store
 }
 
+/** True while the chat shows its dark look (a dark theme is set and the browser prefers dark). */
+export const DarkLook = createContext(false)
+
 export function Icon({ name, class: cls = 'i' }: { name: IconName; class?: string }) {
   return <span class={cls} aria-hidden="true" dangerouslySetInnerHTML={{ __html: icons[name] }} />
 }
 
+/** The category's artwork, drawn for the light or the dark look. */
 export function CategoryIcon({ category, class: cls = 'cat' }: { category: Category | null; class?: string }) {
-  return <Icon name={category ?? 'other'} class={cls} />
+  const c = category ?? 'other'
+  const svg = useContext(DarkLook) ? iconsDark[c] : icons[c]
+  return <span class={cls} aria-hidden="true" dangerouslySetInnerHTML={{ __html: svg }} />
 }
 
 /** A square face with an ink outline: the photo (app icon, persona) or initials. */
-export function Avatar({ name, size, fill = '#fff', url }: { name: string; size: number; fill?: string; url?: string | null }) {
+export function Avatar({ name, size, fill = 'var(--dr-surface)', url }: { name: string; size: number; fill?: string; url?: string | null }) {
   if (url) {
     return <img class="avatar" src={url} alt="" aria-hidden="true" width={size} height={size} style={{ width: size, height: size, objectFit: 'cover' }} />
   }
@@ -38,7 +49,7 @@ export function Avatar({ name, size, fill = '#fff', url }: { name: string; size:
       .join('')
       .toUpperCase() || 'DR'
   return (
-    <span class="avatar" aria-hidden="true" style={{ width: size, height: size, background: fill, fontSize: Math.round(size * 0.4) }}>
+    <span class={`avatar ${fill === 'var(--dr-lemon)' ? 'on-lemon' : ''}`} aria-hidden="true" style={{ width: size, height: size, background: fill, fontSize: Math.round(size * 0.4) }}>
       {initials}
     </span>
   )

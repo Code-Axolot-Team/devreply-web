@@ -1,6 +1,6 @@
 {
   "name": "@devreply/web",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "DevReply for web apps: the in-app chat between your users and you. Works with any framework; renders in a shadow root.",
   "license": "MIT",
   "type": "module",

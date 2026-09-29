@@ -7,7 +7,8 @@ import { DevReply } from './core'
 
 export default DevReply
 export { DevReply }
-export type { DevReplyApi, Options } from './core'
+export { darkTheme } from './styles'
+export type { DevReplyApi, OpenOptions, Options } from './core'
 export type { Category } from './api'
-export type { Attribute, LauncherMode } from './store'
+export type { Attribute, DevReplyEvent, DevReplyEvents, LauncherMode } from './store'
 export type { Theme } from './styles'

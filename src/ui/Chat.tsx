@@ -37,6 +37,8 @@ export function Chat({ conversationId, category }: { conversationId: string | nu
   useSubscribe(model)
   // Started on this screen (not opened from the list): the email ask belongs to its first message only.
   const startedHere = useMemo(() => conversationId === null, [conversationId])
+  // `open(…, { message })`: a draft for the presentation's new conversation, never sent by itself.
+  const draft = useMemo(() => (conversationId === null ? (store.presentation.message ?? '') : ''), [conversationId])
   const [emailAskDone, setEmailAskDone] = useState(false)
   const [viewing, setViewing] = useState<string | null>(null)
 
@@ -141,7 +143,7 @@ export function Chat({ conversationId, category }: { conversationId: string | nu
         ) : (
           <>
             {showsEmailAsk && <EmailAsk onDone={() => setEmailAskDone(true)} />}
-            <Composer autoFocus={conversationId === null} onSend={(text, staged) => model.send(text, staged)} />
+            <Composer autoFocus={conversationId === null} initial={draft} onSend={(text, staged) => model.send(text, staged)} />
           </>
         )}
       </div>
@@ -416,8 +418,16 @@ async function photo(file: File): Promise<Outgoing | null> {
   return { kind: 'image', mime: 'image/jpeg', data: blob, width, height, preview: URL.createObjectURL(blob) }
 }
 
-function Composer({ autoFocus, onSend }: { autoFocus: boolean; onSend: (text: string, staged: Outgoing[]) => void }) {
-  const [draft, setDraft] = useState('')
+function Composer({
+  autoFocus,
+  initial,
+  onSend,
+}: {
+  autoFocus: boolean
+  initial: string
+  onSend: (text: string, staged: Outgoing[]) => void
+}) {
+  const [draft, setDraft] = useState(initial)
   const [staged, setStaged] = useState<Outgoing[]>([])
   const [menu, setMenu] = useState(false)
   const [pickError, setPickError] = useState<string | null>(null)
@@ -429,7 +439,10 @@ function Composer({ autoFocus, onSend }: { autoFocus: boolean; onSend: (text: st
   const enterSends = useMemo(() => window.matchMedia?.('(pointer: fine)').matches ?? true, [])
 
   useEffect(() => {
-    if (autoFocus) ref.current?.focus()
+    const t = ref.current
+    if (!autoFocus || !t) return
+    t.focus()
+    t.setSelectionRange(t.value.length, t.value.length) // a prefilled draft: typing goes on at its end
   }, [autoFocus])
   useEffect(() => {
     const t = ref.current

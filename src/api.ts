@@ -5,6 +5,8 @@ export class DevReplyError extends Error {
   constructor(
     readonly kind: 'unauthenticated' | 'invalidKey' | 'forbidden' | 'invalid' | 'conflict' | 'server' | 'network' | 'unavailable',
     message: string = kind,
+    /** The HTTP status, when the server answered. */
+    readonly status?: number,
   ) {
     super(message)
   }
@@ -34,6 +36,8 @@ export interface Config {
   localize: string[]
   /** The reply-time preset (0.4), e.g. `3_working_days`. */
   replyWithinKey: string | null
+  /** False when the team switched the chat off in the dashboard (0.4.4). */
+  enabled: boolean
 }
 
 /** Who replied (0.4): a teammate's name, title and photo. */
@@ -130,6 +134,7 @@ export function placeholderConfig(appName: string): Config {
     team: [],
     localize: ['greeting', 'intro', 'start_buttons', 'reply_time', 'reply_within'],
     replyWithinKey: '3_working_days',
+    enabled: true,
   }
 }
 
@@ -167,6 +172,7 @@ export function parseConfig(raw: unknown, appName: string): Config {
     team: lossy(o.team, parsePersona).slice(0, 3),
     localize: Array.isArray(o.localize) ? o.localize.filter((x): x is string => typeof x === 'string') : [],
     replyWithinKey: str(o.reply_within_key),
+    enabled: o.enabled !== false,
   }
 }
 
@@ -238,6 +244,32 @@ export function parseMessage(o: Record<string, unknown>): Message | null {
   }
 }
 
+/** A conversation's context from the app (0.4.4): what `open(…, { attributes })` passed. */
+export type Context = Record<string, string | number | boolean>
+
+/**
+ * What the server takes as a conversation's context: at most 20 values, keys of 1–40 letters, digits,
+ * `_ - . space`, values text (up to 500 characters), number or true/false. Anything else is left out
+ * (with a warning), so a bad value never stops the user's first message.
+ */
+export function contextOf(attributes: Record<string, unknown> | null | undefined): Context {
+  const out: Context = {}
+  for (const [key, value] of Object.entries(attributes ?? {})) {
+    if (Object.keys(out).length === 20) {
+      console.warn('DevReply: at most 20 attributes per conversation; the rest are left out.')
+      break
+    }
+    const keyOk = /^[A-Za-z0-9_\-. ]{1,40}$/.test(key)
+    const ok = typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) || typeof value === 'string'
+    if (!keyOk || !ok) {
+      console.warn(`DevReply: attribute ${JSON.stringify(key)} left out (names: 1–40 letters, digits, _ - . or space; values: text, number or true/false).`)
+      continue
+    }
+    out[key] = typeof value === 'string' ? Array.from(value).slice(0, 500).join('') : (value as number | boolean)
+  }
+  return out
+}
+
 export function plainText(m: Message): string {
   return m.blocks
     .map((b) => (b.type === 'text' ? b.text : b.type === 'image' ? 'Photo' : b.type === 'file' ? b.name : b.fallback))
@@ -268,12 +300,13 @@ export class ApiClient {
     const json = await res.json().catch(() => ({}))
     if (res.ok) return json
     const message = str(obj(obj(json).error).message) ?? `HTTP ${res.status}`
-    if (res.status === 401) throw new DevReplyError('unauthenticated', message)
-    if (res.status === 403) throw new DevReplyError('forbidden', message)
-    if (res.status === 400 || res.status === 422) throw new DevReplyError('invalid', message)
-    if (res.status === 409) throw new DevReplyError('conflict', message)
-    if (res.status === 503) throw new DevReplyError('unavailable', message)
-    throw new DevReplyError('server', message)
+    const s = res.status
+    if (s === 401) throw new DevReplyError('unauthenticated', message, s)
+    if (s === 403) throw new DevReplyError('forbidden', message, s)
+    if (s === 400 || s === 422) throw new DevReplyError('invalid', message, s)
+    if (s === 409) throw new DevReplyError('conflict', message, s)
+    if (s === 503) throw new DevReplyError('unavailable', message, s)
+    throw new DevReplyError('server', message, s)
   }
 
   async register(publicKey: string, device: Device): Promise<string> {
@@ -327,8 +360,10 @@ export class ApiClient {
     cat: Category | null,
     text: string,
     attachmentIds: string[],
+    context: Context = {},
   ): Promise<{ conversation: Conversation | null; message: Message | null }> {
-    const r = obj(await this.send('POST', 'v1/conversations', token, { category: cat, text, attachment_ids: attachmentIds }))
+    const body = { category: cat, text, attachment_ids: attachmentIds, ...(Object.keys(context).length ? { context } : {}) }
+    const r = obj(await this.send('POST', 'v1/conversations', token, body))
     return { conversation: parseConversation(obj(r.conversation)), message: parseMessage(obj(r.message)) }
   }
 

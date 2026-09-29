@@ -66,15 +66,74 @@ window.addEventListener('devreply:ready', () => {
   DevReply.setAttributes({ plan: 'pro', trial: false })
   DevReply.onUnreadChange((count) => console.log(count))
 })
-DevReply.open()          // or open('bug')
+DevReply.open()          // or open('bug'); returns false if the chat is switched off
+DevReply.open({ category: 'bug', message: 'Export fails', attributes: { screen: 'export', plan: 'pro' } })
 DevReply.close()
+DevReply.isAvailable     // false when not configured or the team switched the chat off in the dashboard
+DevReply.on('conversationStarted', ({ conversationId, category }) => analytics.track('support_started'))
 DevReply.login(userId)   // signed-in users: see below
 DevReply.logout()
-DevReply.deleteUser()    // Promise<boolean>
+DevReply.deleteUser()    // Promise<boolean>: true deleted now, false queued (retried until done)
 DevReply.handle(url)     // a DevReply link (?devreply=<id>) your router caught first: opens that conversation
 DevReply.configure({ key: 'pk_…', launcher: 'unread', theme: { primary: '#F6EB37', accent: '#FF5FA2' } })
 DevReply.configure({ key: 'pk_…', fonts: 'system' })   // no brand fonts loaded from api.devreply.com
 ```
+
+### Open with a message and context
+
+```js
+DevReply.open({ category: 'bug', message: 'The export button does nothing', attributes: { screen: 'export', build: 412 } })
+```
+
+- `message` prefills the composer of the new conversation this opens (without a category: once the user picks a
+  start button). It's never sent by itself: the user sees it and can edit it.
+- `attributes` go with that new conversation only, as its context (the team sees them on the conversation, not on
+  the user): at most 20, names of 1–40 letters, digits, `_ - .` or spaces, values text, number or true/false.
+  Anything else is left out with a console warning. Existing conversations are left alone.
+- `open('bug', { message, attributes })` works too, and `DevReply.present(…)` is the same function (the name the
+  iOS and Android SDKs use).
+
+### Switched off from the dashboard
+
+Your team can switch the chat off in the dashboard. Then `DevReply.isAvailable` is false, `open` returns
+`false` and shows nothing, the launcher hides, and an open chat closes. Hide your own help button with it:
+
+```js
+helpButton.hidden = !DevReply.isAvailable
+```
+
+`isAvailable` is true before the first config arrives (the config is cached for the next page load).
+
+### Events
+
+```js
+const stop = DevReply.on('messageSent', ({ conversationId }) => analytics.track('support_message'))
+stop() // no more calls
+```
+
+`open` and `close` (the messenger appears or goes away, any way), `conversationStarted`
+(`{ conversationId, category }`, once the server accepted it) and `messageSent` (`{ conversationId }`, every
+message the server accepted, the first one too, right after `conversationStarted`).
+
+### Colours and dark mode
+
+```js
+import DevReply, { darkTheme } from '@devreply/web'   // script tag: DevReply.darkTheme
+
+DevReply.configure({ key: 'pk_…', theme: { primary: '#0A84FF', accent: '#FF9F0A' }, darkTheme })
+DevReply.setTheme({ dark: { ...darkTheme, primary: '#7A3CFF' } })   // at any time; dark: null = always light
+```
+
+Six colours, for light and for dark, all optional: `primary` (the header and the prompt cards), `accent` (send,
+start, save), `userBubble` and `userBubbleText` (the user's messages), `background` and `ink` (text). Everything
+else is derived from them; other keys are ignored.
+
+- **Light** looks exactly as it always has: the header and cards take `primary`, outlines, shadows and text on
+  coloured buttons take `ink`.
+- **Dark** (only with `darkTheme`, whenever the browser prefers dark, live): DevReply's "Deep blue" preset, or
+  your colours over it. Cards and bubbles are 8 % of the way from `background` toward a half-and-half mix of
+  `ink` and `primary`, secondary text 35 % of the way from `ink` to `background`; thin `ink` outlines; shadows darker than the page; text on `primary` and `accent` is black or white,
+  whichever reads better. The launcher, the team tag and unread counts stay DevReply's lemon.
 
 If your site sends a Content-Security-Policy: `script-src` and `font-src https://api.devreply.com`,
 `connect-src https://api.devreply.com https://storage.googleapis.com`,
@@ -87,7 +146,7 @@ If your app has accounts:
 ```js
 DevReply.login(user.id)                // after sign-in: your own id for the user, never an email or a secret
 DevReply.logout()                      // on every sign-out and account switch
-const ok = await DevReply.deleteUser() // in your delete-account flow; false if DevReply couldn't be reached
+const ok = await DevReply.deleteUser() // in your delete-account flow; true: deleted now, false: queued
 ```
 
 - `login` labels the user for your team (the dashboard shows it as "User ID (your app)") and lets your backend
@@ -95,7 +154,10 @@ const ok = await DevReply.deleteUser() // in your delete-account flow; false if 
   another's conversations. If another id was signed in on this browser, DevReply logs out first.
 - `logout` revokes this install and its push token; the browser forgets the chat and the next person starts empty.
   The conversations stay with your team.
-- `deleteUser` deletes the user's name, email, attributes, conversations, messages and files, then logs out.
+- `deleteUser` deletes the user's name, email, attributes, conversations, messages and files, and the browser
+  forgets the user. If DevReply can't be reached, the browser still forgets the user at once and the deletion
+  waits in `localStorage` (the old install's token), retried on every page load and whenever the tab comes back
+  until the server confirms. `true`: deleted now; `false`: queued.
 
 Your backend can delete a user too, with a read-and-write secret key (never in an app):
 
@@ -121,6 +183,11 @@ test a script that answers "Bubble test <nonce>" with "Founder reply <nonce>" fr
 npx playwright install chromium webkit
 DEVREPLY_TEST_PK=pk_… DEVREPLY_TEST_NONCE=1234 npx playwright test
 ```
+
+`tests/v044.spec.ts` runs without a key against a stubbed API (prefilled message and context, the on/off
+switch, events, pending deletions, dark mode). `DEVREPLY_SHOTS=<folder>` saves its screenshots;
+`DEVREPLY_BASELINE_DIST=<previous release's dist/>` checks light mode is pixel-identical to it. Units:
+`node --test tests/*.test.mjs`.
 
 `scripts/gen-icons.mjs` regenerates `src/icons.ts` from the iOS and Android artwork (maintainers, in the main repo).
 

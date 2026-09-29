@@ -5,6 +5,7 @@ import {
   ApiClient,
   type Category,
   type Config,
+  type Context,
   type Conversation,
   type Device,
   DevReplyError,
@@ -24,6 +25,28 @@ export type LauncherMode = 'always' | 'unread' | 'none'
 export type Route = { screen: 'home' } | { screen: 'chat'; conversationId: string | null; category: Category | null }
 
 type Listener = () => void
+
+/** What `DevReply.on` reports (0.4.4), for the site's analytics. */
+export interface DevReplyEvents {
+  /** The messenger appeared. */
+  open: undefined
+  /** The messenger went away (the close button, Escape, the launcher, `close()`, a logout…). */
+  close: undefined
+  /** The server accepted a new conversation (its first message). */
+  conversationStarted: { conversationId: string; category: Category | null }
+  /** The server accepted a message from the user (the first one too, right after `conversationStarted`). */
+  messageSent: { conversationId: string }
+}
+export type DevReplyEvent = keyof DevReplyEvents
+
+/** What one `open(…)` asked for (0.4.4): a draft for the new conversation, and its context. */
+export interface Presentation {
+  message?: string
+  context?: Context
+}
+
+/** The DevReply account deletions still to do (0.4.4): old install tokens, kept until the server says done. */
+const MAX_PENDING_DELETIONS = 10
 
 /** Local storage that never throws (private windows, blocked storage): the SDK still works, just forgets. */
 const storage = {
@@ -94,6 +117,10 @@ export class Store {
   launcher: LauncherMode = 'always'
   /** Conversation on screen (no unread for what the user is looking at). */
   visibleConversation: string | null = null
+  /** The prefilled message and context of the current presentation, until its first conversation starts. */
+  presentation: Presentation = {}
+  /** The messenger's colours as inline CSS variables: light, and dark (null: stays light) (0.4.4). */
+  theme: { light: string; dark: string | null } = { light: '', dark: null }
 
   private listeners = new Set<Listener>()
   private registering: Promise<string> | null = null
@@ -103,6 +130,34 @@ export class Store {
   private hostUser: { name?: string; email?: string } | null = null
   private pendingAttributes: Record<string, Attribute> = {}
   private polling: number | null = null
+  private events = new Map<DevReplyEvent, Set<(payload: never) => void>>()
+  private deleting = false
+
+  /** `DevReply.on`: any number of listeners; a listener that throws never breaks the chat. */
+  on<E extends DevReplyEvent>(event: E, fn: (payload: DevReplyEvents[E]) => void): () => void {
+    const set = this.events.get(event) ?? new Set()
+    this.events.set(event, set)
+    set.add(fn as (payload: never) => void)
+    return () => {
+      set.delete(fn as (payload: never) => void)
+    }
+  }
+
+  fire<E extends DevReplyEvent>(event: E, ...payload: DevReplyEvents[E] extends undefined ? [] : [DevReplyEvents[E]]) {
+    for (const fn of [...(this.events.get(event) ?? [])]) {
+      try {
+        ;(fn as (p: unknown) => void)(payload[0])
+      } catch (e) {
+        console.error('DevReply: an event listener threw', e)
+      }
+    }
+  }
+
+  /** False when DevReply isn't configured or the team switched the chat off (0.4.4). Before the
+   *  first config arrives (nothing cached): true. */
+  get isAvailable(): boolean {
+    return this.client !== null && this.config.enabled
+  }
 
   subscribe(fn: Listener): () => void {
     this.listeners.add(fn)
@@ -139,6 +194,7 @@ export class Store {
     const stored = storage.get(this.userKey)
     if (this.hostUserId && stored && stored !== this.hostUserId) this.forgetInstall()
     this.emit()
+    void this.retryDeletions()
     void (async () => {
       await this.sendUserId()
       if (this.hostUser) await this.saveProfile(this.hostUser).catch(() => undefined)
@@ -159,6 +215,10 @@ export class Store {
 
   private get configKey() {
     return `devreply:config:${this.publicKey ?? ''}`
+  }
+
+  private get deletionsKey() {
+    return `devreply:pending-deletions:${this.client?.baseUrl ?? ''}|${this.publicKey ?? ''}`
   }
 
   /** The install token, registering this browser first if needed. Concurrent callers share one registration. */
@@ -226,6 +286,8 @@ export class Store {
       this.lastError = e instanceof DevReplyError ? e : new DevReplyError('network')
     }
     this.emit()
+    // The team switched the chat off while it was open.
+    if (this.isOpen && !this.config.enabled) this.close()
   }
 
   async loadProfileIfNeeded() {
@@ -282,17 +344,73 @@ export class Store {
     if (this.client) void this.refresh()
   }
 
-  /** `DevReply.deleteUser()`: deletes the user's data on the server, then forgets the install. */
+  /**
+   * `DevReply.deleteUser()`: deletes the user's data on the server and forgets the install. If the
+   * server can't do it now, the browser forgets the user anyway and the deletion waits in
+   * localStorage (the old token only), retried at every configure and whenever the tab comes back.
+   * True: deleted now. False: queued.
+   */
   async deleteUser(): Promise<boolean> {
-    if (!this.client) return false
-    try {
-      await this.authorized((api, t) => api.deleteUser(t))
-    } catch {
-      return false
+    const client = this.client
+    if (!client) return false
+    const token = storage.get(this.tokenKey)
+    // Nothing registered in this browser: nothing of this user's on the server.
+    let done = token === null
+    if (token) {
+      try {
+        await client.deleteUser(token)
+        done = true
+      } catch (e) {
+        done = deletionDone(e)
+        if (!done) this.queueDeletion(token)
+      }
     }
-    this.forgetInstall()
+    this.forgetInstall() // what logout does on the device, without POST /v1/logout
     void this.refresh()
-    return true
+    return done
+  }
+
+  /** The saved deletions (old install tokens). */
+  pendingDeletions(): string[] {
+    try {
+      const list: unknown = JSON.parse(storage.get(this.deletionsKey) ?? '[]')
+      return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string') : []
+    } catch {
+      return []
+    }
+  }
+
+  private savePendingDeletions(list: string[]) {
+    storage.set(this.deletionsKey, list.length ? JSON.stringify(list.slice(-MAX_PENDING_DELETIONS)) : null)
+  }
+
+  private queueDeletion(token: string) {
+    const list = this.pendingDeletions().filter((t) => t !== token)
+    this.savePendingDeletions([...list, token])
+  }
+
+  /** Sends each saved deletion with its own old token (never the current install's). 2xx, 401 and 404
+   *  count as done; anything else waits for the next try. */
+  async retryDeletions() {
+    const client = this.client
+    if (!client || this.deleting) return
+    const list = this.pendingDeletions()
+    if (list.length === 0) return
+    this.deleting = true
+    try {
+      for (const token of list) {
+        let done = false
+        try {
+          await client.deleteUser(token)
+          done = true
+        } catch (e) {
+          done = deletionDone(e)
+        }
+        if (done) this.savePendingDeletions(this.pendingDeletions().filter((t) => t !== token))
+      }
+    } finally {
+      this.deleting = false
+    }
   }
 
   private forgetInstall() {
@@ -306,9 +424,12 @@ export class Store {
     this.pendingAttributes = {}
     this.conversations = []
     this.profile = null
+    const wasOpen = this.isOpen
     this.isOpen = false
     this.visibleConversation = null
+    this.presentation = {}
     this.emit()
+    if (wasOpen) this.fire('close')
   }
 
   setUser(user: { name?: string; email?: string }) {
@@ -341,17 +462,27 @@ export class Store {
 
   // ---- the panel ----
 
-  open(route?: Route) {
+  /** Opens the messenger (with a category: on a new conversation). False, and nothing shown, when
+   *  DevReply isn't configured or the chat is switched off. */
+  open(route?: Route, presentation: Presentation = {}): boolean {
+    if (!this.isAvailable) return false
+    const wasOpen = this.isOpen
     this.route = route && route.screen === 'chat' ? [{ screen: 'home' }, route] : [{ screen: 'home' }]
+    this.presentation = presentation
     this.isOpen = true
     this.emit()
+    if (!wasOpen) this.fire('open')
     void this.refresh()
+    return true
   }
 
   close() {
+    const wasOpen = this.isOpen
     this.isOpen = false
     this.visibleConversation = null
+    this.presentation = {}
     this.emit()
+    if (wasOpen) this.fire('close')
     void this.refresh()
   }
 
@@ -371,7 +502,7 @@ export class Store {
   /** Opens the chat on a conversation from a DevReply link (`?devreply=<id>`), and tells the server
    *  the link works. Home if this browser doesn't have that conversation. */
   async openFromLink(conversationId: string) {
-    this.open()
+    if (!this.open()) return
     void this.authorized((api, t) => api.deepLinkOpened(t)).catch(() => undefined)
     await this.refresh()
     if (this.conversations.some((c) => c.id === conversationId)) {
@@ -397,9 +528,16 @@ export class Store {
       if (!this.isOpen && document.visibilityState === 'visible' && this.conversations.length > 0) void this.refresh()
     }, 30_000)
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && !this.isOpen) void this.refresh()
+      if (document.visibilityState !== 'visible') return
+      void this.retryDeletions()
+      if (!this.isOpen) void this.refresh()
     })
   }
+}
+
+/** A deletion the server has done, or has nothing left to do for (the install or user is already gone). */
+function deletionDone(e: unknown): boolean {
+  return e instanceof DevReplyError && (e.status === 401 || e.status === 404)
 }
 
 export const store = new Store()
@@ -478,6 +616,7 @@ export class ConversationModel {
       if (this.conversationId) {
         const id = this.conversationId
         const m = await store.authorized((api, t) => api.sendMessage(t, id, item.text, ids))
+        store.fire('messageSent', { conversationId: id })
         if (m) {
           this.messages = [...this.messages, m]
           // The home list shows it straight away, even if the user goes back before the next poll.
@@ -485,11 +624,17 @@ export class ConversationModel {
           if (c) store.upsert({ ...c, lastText: plainText(m), lastAuthor: 'user', lastMessageAt: m.createdAt, status: 'open' })
         }
       } else {
-        const started = await store.authorized((api, t) => api.start(t, this.category, item.text, ids))
+        // The context `open(…, { attributes })` passed goes with the presentation's first new conversation only.
+        const presentation = store.presentation
+        const context = presentation.context ?? {}
+        const started = await store.authorized((api, t) => api.start(t, this.category, item.text, ids, context))
+        if (store.presentation === presentation) store.presentation = {}
         if (started.conversation) {
           this.conversationId = started.conversation.id
           store.visibleConversation = started.conversation.id
           store.upsert(started.conversation)
+          store.fire('conversationStarted', { conversationId: started.conversation.id, category: this.category })
+          store.fire('messageSent', { conversationId: started.conversation.id })
         }
         if (started.message) this.messages = [...this.messages, started.message]
       }
