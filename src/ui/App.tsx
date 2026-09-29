@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'preact/hooks'
 import { store } from '../store'
 import { Chat } from './Chat'
 import { Home } from './Home'
+import { t } from '../i18n'
 import { Icon, useStore } from './parts'
 
 /**
@@ -13,7 +14,7 @@ import { Icon, useStore } from './parts'
 export function App({ themeStyle }: { themeStyle: string }) {
   const s = useStore()
   const unread = s.unreadCount
-  const team = s.config.teamName || 'the team'
+  const team = s.config.teamName || t('team')
   const showsLauncher = s.launcher === 'always' || (s.launcher === 'unread' && (unread > 0 || s.isOpen))
   const launcher = useRef<HTMLButtonElement>(null)
   const panel = useRef<HTMLDivElement>(null)
@@ -38,15 +39,15 @@ export function App({ themeStyle }: { themeStyle: string }) {
   }, [s.isOpen])
 
   const label = s.isOpen
-    ? 'Close the chat'
+    ? t('launcher.close')
     : unread === 1
-      ? `New reply from ${team}`
+      ? t('launcher.one', { team })
       : unread > 1
-        ? `${unread} new replies from ${team}`
-        : `Chat with ${team}`
+        ? t('launcher.many', { team, count: unread })
+        : t('launcher.open', { team })
 
   return (
-    <div class={`dr ${s.isOpen ? 'open' : ''}`} style={themeStyle}>
+    <div class={`dr ${s.isOpen ? 'open' : ''}`} style={themeStyle} lang={s.language}>
       {s.isOpen && (
         <div
           ref={panel}

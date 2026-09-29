@@ -29,11 +29,15 @@ export function themeVars(t: Theme): string {
   )
 }
 
-/** @font-face has to live in the page (shadow roots can't declare fonts); unique names, so no clash. */
+/** @font-face has to live in the page (shadow roots can't declare fonts); unique names, so no clash. Latin and
+ *  Latin Extended (Polish, Turkish, Czech…): the browser loads the second file only for those letters.
+ *  Greek, Cyrillic, Japanese, Korean and Chinese use the system font. */
 export function fontFaces(base: string): string {
   return `
-@font-face{font-family:"DevReply Archivo Black";src:url("${base}fonts/archivo-black-latin.woff2") format("woff2");font-weight:400;font-display:swap}
-@font-face{font-family:"DevReply Space Grotesk";src:url("${base}fonts/space-grotesk-latin.woff2") format("woff2");font-weight:300 700;font-display:swap}`
+@font-face{font-family:"DevReply Archivo Black";src:url("${base}fonts/archivo-black-latin.woff2") format("woff2");font-weight:400;font-display:swap;unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+@font-face{font-family:"DevReply Archivo Black";src:url("${base}fonts/archivo-black-latin-ext.woff2") format("woff2");font-weight:400;font-display:swap;unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF}
+@font-face{font-family:"DevReply Space Grotesk";src:url("${base}fonts/space-grotesk-latin.woff2") format("woff2");font-weight:300 700;font-display:swap;unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+@font-face{font-family:"DevReply Space Grotesk";src:url("${base}fonts/space-grotesk-latin-ext.woff2") format("woff2");font-weight:300 700;font-display:swap;unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF}`
 }
 
 export const css = `
@@ -135,6 +139,15 @@ svg{display:block;width:100%;height:100%}
 .empty h2{font:26px/1.1 var(--dr-display);margin:0}
 .empty p{margin:0;font-size:16px;font-weight:500;color:var(--dr-muted)}
 .time{text-align:center;padding-top:12px}
+.row.persona{padding-right:48px}
+.by{display:flex;align-items:center;gap:7px;margin:4px 0 2px;font-size:13px}
+.by b{font-weight:700}
+.by .muted{font-size:12px}
+.by .avatar{border-width:2px}
+.reply-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.faces{display:flex}
+.faces .avatar{margin-left:-8px;box-shadow:none}
+.faces .avatar:first-child{margin-left:0}
 .row{display:flex;align-items:flex-end;gap:10px}
 .row.me{justify-content:flex-end;padding-left:48px}
 .row.team{padding-right:48px}

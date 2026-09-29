@@ -16,6 +16,7 @@ import {
   parseConfig,
   placeholderConfig,
 } from './api'
+import { language, localeTag, setLocaleOverride, t } from './i18n'
 
 export type Attribute = string | number | boolean | null
 export type LauncherMode = 'always' | 'unread' | 'none'
@@ -75,6 +76,7 @@ function device(appVersion?: string): Device {
     os_version: os.slice(0, 100),
     app_version: (appVersion ?? location.hostname).slice(0, 100),
     sdk_version: SDK_VERSION,
+    locale: localeTag().slice(0, 35),
   }
 }
 
@@ -95,6 +97,9 @@ export class Store {
 
   private listeners = new Set<Listener>()
   private registering: Promise<string> | null = null
+  /** After the server refuses the public key: no new attempt before this (1 min, 5 min, 30 min, then 6 h). */
+  private keyRefusedUntil = 0
+  private keyRefusals = 0
   private hostUser: { name?: string; email?: string } | null = null
   private pendingAttributes: Record<string, Attribute> = {}
   private polling: number | null = null
@@ -154,12 +159,24 @@ export class Store {
     if (!client || !pk) throw new DevReplyError('invalid', 'Call DevReply.configure first')
     const stored = storage.get(this.tokenKey)
     if (stored) return stored
+    // A refused key isn't retried in a loop: it waits, longer each time (spec 05).
+    if (Date.now() < this.keyRefusedUntil) throw new DevReplyError('invalidKey')
     if (!this.registering) {
       this.registering = client
         .register(pk, device(this.appVersion))
         .then((t) => {
           storage.set(this.tokenKey, t)
+          this.keyRefusals = 0
           return t
+        })
+        .catch((e) => {
+          if (e instanceof DevReplyError && e.kind === 'invalidKey') {
+            const waits = [60_000, 300_000, 1_800_000, 21_600_000]
+            this.keyRefusedUntil = Date.now() + waits[Math.min(this.keyRefusals, waits.length - 1)]
+            if (this.keyRefusals === 0) console.warn(`DevReply: this public key isn't recognised: ${pk.slice(0, 9)}…`)
+            this.keyRefusals++
+          }
+          throw e
         })
         .finally(() => {
           this.registering = null
@@ -255,6 +272,31 @@ export class Store {
     this.visibleConversation = null
     this.emit()
     void this.refresh()
+  }
+
+  /** The chat's language: a tag like `es` or `pt-BR`, or null to follow the browser. */
+  setLocale(tag: string | null) {
+    setLocaleOverride(tag)
+    this.emit()
+    if (this.client && storage.get(this.tokenKey)) {
+      void this.authorized((api, tk) => api.setLocale(tk, localeTag().slice(0, 35))).catch(() => undefined)
+    }
+  }
+
+  get language() {
+    return language()
+  }
+
+  /** Opens the chat on a conversation from a DevReply link (`?devreply=<id>`), and tells the server
+   *  the link works. Home if this browser doesn't have that conversation. */
+  async openFromLink(conversationId: string) {
+    this.open()
+    void this.authorized((api, t) => api.deepLinkOpened(t)).catch(() => undefined)
+    await this.refresh()
+    if (this.conversations.some((c) => c.id === conversationId)) {
+      this.route = [{ screen: 'home' }, { screen: 'chat', conversationId, category: null }]
+      this.emit()
+    }
   }
 
   push(route: Route) {
@@ -375,12 +417,12 @@ export class ConversationModel {
       const kind = e instanceof DevReplyError ? e.kind : 'network'
       const reason =
         kind === 'unavailable'
-          ? "Attachments can't be sent right now. Tap to retry."
+          ? t('failed.attachments')
           : kind === 'network'
-            ? "You're offline. Tap to retry."
+            ? t('failed.offline')
             : kind === 'invalid' && e instanceof DevReplyError
-              ? `Not sent: ${e.message}. Tap to retry.`
-              : 'Not sent. Tap to retry.'
+              ? t('failed.reason', { reason: e.message })
+              : t('failed.generic')
       this.pending = this.pending.map((p) => (p.id === item.id ? { ...p, failure: reason } : p))
     }
     this.emit()

@@ -26,6 +26,21 @@ export interface Config {
   replyTime: string
   replyWithin: string
   startButtons: StartButton[]
+  /** The app's icon (0.4): the square avatar in the header and on home. */
+  appIconUrl: string | null
+  /** Teammates' faces for the home screen (0.4), up to 3. */
+  team: Persona[]
+  /** Texts still at DevReply's defaults (0.4): shown in the user's language. */
+  localize: string[]
+  /** The reply-time preset (0.4), e.g. `3_working_days`. */
+  replyWithinKey: string | null
+}
+
+/** Who replied (0.4): a teammate's name, title and photo. */
+export interface Persona {
+  name: string
+  title: string
+  avatarUrl: string | null
 }
 
 export interface Conversation {
@@ -46,9 +61,13 @@ export type Block =
 
 export interface Message {
   id: string
+  /** Server lines DevReply knows (0.4), e.g. `resolved`: shown in the user's language. */
+  systemKey?: string
   author: 'user' | 'admin' | 'agent' | 'system'
   createdAt: string
   blocks: Block[]
+  /** Team replies (0.4): who wrote it. */
+  persona?: Persona
 }
 
 export interface Profile {
@@ -62,6 +81,8 @@ export interface Device {
   os_version: string
   app_version: string
   sdk_version: string
+  /** The chat's language (0.4). */
+  locale: string
 }
 
 export const SDK_VERSION: string = __SDK_VERSION__
@@ -105,7 +126,23 @@ export function placeholderConfig(appName: string): Config {
     replyTime: 'Usually replies within 3 working days',
     replyWithin: '3 working days',
     startButtons: (['bug', 'billing', 'idea', 'question'] as Category[]).map((c) => ({ category: c, title: DEFAULT_TITLES[c] })),
+    appIconUrl: null,
+    team: [],
+    localize: ['greeting', 'intro', 'start_buttons', 'reply_time', 'reply_within'],
+    replyWithinKey: '3_working_days',
   }
+}
+
+/** Only https images (never a data: or javascript: URL from anywhere). */
+const imageUrl = (v: unknown): string | null => {
+  const s = str(v)
+  return s && s.startsWith('https://') ? s : null
+}
+
+export function parsePersona(o: Record<string, unknown>): Persona | null {
+  const name = str(o.name)?.trim()
+  if (!name) return null
+  return { name, title: str(o.title)?.trim() ?? '', avatarUrl: imageUrl(o.avatar_url) }
 }
 
 export function parseConfig(raw: unknown, appName: string): Config {
@@ -126,6 +163,10 @@ export function parseConfig(raw: unknown, appName: string): Config {
     replyTime: str(o.reply_time) ?? d.replyTime,
     replyWithin: str(o.reply_within) ?? d.replyWithin,
     startButtons: buttons,
+    appIconUrl: imageUrl(o.app_icon_url),
+    team: lossy(o.team, parsePersona).slice(0, 3),
+    localize: Array.isArray(o.localize) ? o.localize.filter((x): x is string => typeof x === 'string') : [],
+    replyWithinKey: str(o.reply_within_key),
   }
 }
 
@@ -173,13 +214,28 @@ export function parseBlock(b: Record<string, unknown>): Block {
   }
 }
 
+/** The resolved line as servers before the `key` wrote it. */
+const RESOLVED_TEXT = '✓ Marked as resolved. Reply here any time to open it again.'
+
 export function parseMessage(o: Record<string, unknown>): Message | null {
   const id = str(o.id)
   const at = str(o.created_at)
   if (!id || !at) return null
   const a = str(o.author)
   const author = a === 'user' || a === 'admin' || a === 'agent' || a === 'system' ? a : 'admin'
-  return { id, author, createdAt: at, blocks: lossy(o.blocks, parseBlock) }
+  const persona = o.persona && typeof o.persona === 'object' ? parsePersona(obj(o.persona)) : null
+  const blocks = Array.isArray(o.blocks) ? o.blocks : []
+  const first = obj(blocks[0])
+  const systemKey =
+    author === 'system' && (str(first.key) === 'resolved' || str(first.text) === RESOLVED_TEXT) ? 'resolved' : undefined
+  return {
+    id,
+    author,
+    createdAt: at,
+    blocks: lossy(o.blocks, parseBlock),
+    ...(persona ? { persona } : {}),
+    ...(systemKey ? { systemKey } : {}),
+  }
 }
 
 export function plainText(m: Message): string {
@@ -229,6 +285,16 @@ export class ApiClient {
       if (e instanceof DevReplyError && e.kind === 'unauthenticated') throw new DevReplyError('invalidKey')
       throw e
     }
+  }
+
+  /** The chat's language changed (0.4): the team sees it next to the user. Push is left alone. */
+  async setLocale(token: string, locale: string): Promise<void> {
+    await this.send('PATCH', 'v1/install', token, { locale })
+  }
+
+  /** The app opened a DevReply link (0.4): Settings shows the deep link works. */
+  async deepLinkOpened(token: string): Promise<void> {
+    await this.send('POST', 'v1/deep_link_opened', token)
   }
 
   async config(token: string, appName: string): Promise<{ config: Config; raw: unknown }> {

@@ -33,6 +33,11 @@ the dashboard: it has your key and does this for you.
   waits (`"unread"`), or none (`"none"`: open it from your own link).
 - Home with start buttons, the user's conversations, and the chat: photos and files, name first, optional email,
   "we got it" with your reply time. Full screen on phones, a panel on desktop.
+- Each reply shows who wrote it (the teammate's name, title and photo), and the header shows your app icon.
+- 15 languages, the browser's by default: `configure({ key, locale: 'es' })`, `data-locale="es"`, or
+  `DevReply.setLocale('es')` at any time.
+- Replies from email: DevReply's "Reply in the app" button opens your web app with `?devreply=<conversation>`, and
+  the script opens that conversation (set your web app's address in the dashboard, the app → Settings).
 
 ## React
 
@@ -63,12 +68,14 @@ window.addEventListener('devreply:ready', () => {
 })
 DevReply.open()          // or open('bug')
 DevReply.close()
+DevReply.handle(url)     // a DevReply link (?devreply=<id>) your router caught first: opens that conversation
 DevReply.configure({ key: 'pk_…', launcher: 'unread', theme: { primary: '#F6EB37', accent: '#FF5FA2' } })
 DevReply.configure({ key: 'pk_…', fonts: 'system' })   // no brand fonts loaded from api.devreply.com
 ```
 
 If your site sends a Content-Security-Policy: `script-src` and `font-src https://api.devreply.com`,
-`connect-src https://api.devreply.com https://storage.googleapis.com`, `img-src https://storage.googleapis.com blob:`.
+`connect-src https://api.devreply.com https://storage.googleapis.com`,
+`img-src https://api.devreply.com https://storage.googleapis.com blob:` (team photos and your app icon).
 
 ## Build and test
 

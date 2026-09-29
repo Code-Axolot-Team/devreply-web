@@ -1,11 +1,15 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks'
-import { type Category, DEFAULT_TITLES, DevReplyError, type Message, type Outgoing } from '../api'
+import { type Category, type Config, DevReplyError, type Message, type Outgoing } from '../api'
+import { intlLocale, t } from '../i18n'
 import { ConversationModel, type Pending, store } from '../store'
-import { Avatar, CategoryIcon, Icon, IconButton, PROMPTS, fileSize, useStore, useSubscribe } from './parts'
+import { Avatar, CategoryIcon, Icon, IconButton, categoryTitle, fileSize, prompt, replyAllow, replyTime, useStore, useSubscribe } from './parts'
+
+/** The fallback text the API parser writes for blocks this SDK can't show. */
+const UNSUPPORTED_EN = 'This message needs a newer version of the app.'
 
 type Item =
   | { kind: 'time'; at: string; key: string }
-  | { kind: 'message'; message: Message; key: string }
+  | { kind: 'message'; message: Message; key: string; showsPersona: boolean }
   | { kind: 'pending'; item: Pending; key: string }
   | { kind: 'notice'; key: string }
 
@@ -15,10 +19,12 @@ function items(model: ConversationModel): Item[] {
   const firstFromUser = model.messages.findIndex((m) => m.author === 'user')
   model.messages.forEach((m, i) => {
     const prev = model.messages[i - 1]
-    if (!prev || new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() > 15 * 60_000) {
-      out.push({ kind: 'time', at: m.createdAt, key: `time-${m.id}` })
-    }
-    out.push({ kind: 'message', message: m, key: m.id })
+    const timeLabel = !prev || new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() > 15 * 60_000
+    if (timeLabel) out.push({ kind: 'time', at: m.createdAt, key: `time-${m.id}` })
+    // Who replied: above the first reply of each group (after the user, a time label, or another persona).
+    const showsPersona =
+      !!m.persona && (timeLabel || !prev || prev.author === 'user' || prev.author === 'system' || prev.persona?.name !== m.persona.name)
+    out.push({ kind: 'message', message: m, key: m.id, showsPersona })
     if (i === firstFromUser) out.push({ kind: 'notice', key: 'notice' })
   })
   for (const p of model.pending) out.push({ kind: 'pending', item: p, key: `pending-${p.id}` })
@@ -59,7 +65,7 @@ export function Chat({ conversationId, category }: { conversationId: string | nu
     if (atBottom.current && thread.current) thread.current.scrollTop = 0
   }, [newest, list.length])
   const cat = model.category ?? 'other'
-  const title = s.config.startButtons.find((b) => b.category === cat)?.title ?? DEFAULT_TITLES[cat]
+  const title = categoryTitle(s.config, cat)
   const showsEmailAsk =
     startedHere && !emailAskDone && s.profile !== null && !s.profile.email && model.messages.some((m) => m.author === 'user')
 
@@ -80,13 +86,13 @@ export function Chat({ conversationId, category }: { conversationId: string | nu
   return (
     <div class="screen">
       <div class="bar">
-        <IconButton icon="back" label="Back" onClick={() => store.back()} />
-        <Avatar name={s.config.teamName} size={32} />
+        <IconButton icon="back" label={t('back')} onClick={() => store.back()} />
+        <Avatar name={s.config.teamName} size={32} url={s.config.appIconUrl} />
         <div class="bar-text">
-          <div class="bar-name">{s.config.teamName || 'Chat'}</div>
-          {s.config.replyTime && <div class="bar-sub">{s.config.replyTime}</div>}
+          <div class="bar-name">{s.config.teamName || t('chat')}</div>
+          {replyTime(s.config) && <div class="bar-sub">{replyTime(s.config)}</div>}
         </div>
-        <IconButton icon="close" label="Close" onClick={() => store.close()} class="close" />
+        <IconButton icon="close" label={t('close')} onClick={() => store.close()} class="close" />
       </div>
       {list.length === 0 ? (
         <div class="empty" onTouchStart={onTouchStart} onTouchMove={onTouchMove}>
@@ -94,7 +100,7 @@ export function Chat({ conversationId, category }: { conversationId: string | nu
             <CategoryIcon category={cat} class="" />
           </span>
           <h2>{title}</h2>
-          <p>{PROMPTS[cat]}</p>
+          <p>{prompt(cat)}</p>
         </div>
       ) : (
         <div
@@ -112,11 +118,18 @@ export function Chat({ conversationId, category }: { conversationId: string | nu
               it.kind === 'time' ? (
                 <TimeLabel key={it.key} at={it.at} />
               ) : it.kind === 'message' ? (
-                <MessageRow key={it.key} message={it.message} team={s.config.teamName} onOpenImage={setViewing} />
+                <MessageRow
+                  key={it.key}
+                  message={it.message}
+                  showsPersona={it.showsPersona}
+                  team={s.config.teamName}
+                  icon={s.config.appIconUrl}
+                  onOpenImage={setViewing}
+                />
               ) : it.kind === 'pending' ? (
                 <PendingRow key={it.key} item={it.item} onRetry={() => model.retry(it.item)} />
               ) : (
-                <Notice key={it.key} team={s.config.teamName} within={s.config.replyWithin} email={s.profile?.email ?? null} />
+                <Notice key={it.key} config={s.config} email={s.profile?.email ?? null} />
               ),
             )}
           </div>
@@ -133,9 +146,9 @@ export function Chat({ conversationId, category }: { conversationId: string | nu
         )}
       </div>
       {viewing && (
-        <div class="viewer" role="dialog" aria-label="Photo" onClick={() => setViewing(null)}>
-          <img src={viewing} alt="Photo" />
-          <IconButton icon="close" label="Close photo" onClick={() => setViewing(null)} />
+        <div class="viewer" role="dialog" aria-label={t('photo')} onClick={() => setViewing(null)}>
+          <img src={viewing} alt={t('photo')} />
+          <IconButton icon="close" label={t('close_photo')} onClick={() => setViewing(null)} />
         </div>
       )}
     </div>
@@ -145,29 +158,50 @@ export function Chat({ conversationId, category }: { conversationId: string | nu
 /** "MON · 6:52 PM", like the timestamps on devreply.com. */
 function TimeLabel({ at }: { at: string }) {
   const d = new Date(at)
-  const day = new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(d)
-  const time = new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(d)
+  const day = new Intl.DateTimeFormat(intlLocale(), { weekday: 'short' }).format(d)
+  const time = new Intl.DateTimeFormat(intlLocale(), { timeStyle: 'short' }).format(d)
   return <div class="time kicker">{`${day} · ${time}`}</div>
 }
 
-function MessageRow({ message, team, onOpenImage }: { message: Message; team: string; onOpenImage: (url: string) => void }) {
+function MessageRow({
+  message,
+  showsPersona,
+  team,
+  icon,
+  onOpenImage,
+}: {
+  message: Message
+  showsPersona: boolean
+  team: string
+  icon: string | null
+  onOpenImage: (url: string) => void
+}) {
   if (message.author === 'system') {
-    // e.g. "✓ Marked as resolved…": a quiet line, not a bubble.
-    return <div class="system">{message.blocks.map((b) => (b.type === 'text' ? b.text : '')).join(' ')}</div>
+    // e.g. "✓ Marked as resolved…": a quiet line, not a bubble. Known lines in the user's language.
+    const text = message.systemKey === 'resolved' ? t('system.resolved') : message.blocks.map((b) => (b.type === 'text' ? b.text : '')).join(' ')
+    return <div class="system">{text}</div>
   }
   const me = message.author === 'user'
+  const persona = me ? undefined : message.persona
   return (
-    <div class={`row ${me ? 'me' : 'team'}`}>
-      {!me && <Avatar name={team} size={30} fill="var(--dr-lemon)" />}
+    <div class={`row ${me ? 'me' : 'team'} ${persona ? 'persona' : ''}`}>
+      {!me && !persona && <Avatar name={team} size={30} fill="var(--dr-lemon)" url={icon} />}
       <div class="stack">
+        {persona && showsPersona && (
+          <div class="by" data-testid="devreply.persona">
+            <Avatar name={persona.name} size={22} url={persona.avatarUrl} />
+            <b>{persona.name}</b>
+            {persona.title && <span class="muted">{persona.title}</span>}
+          </div>
+        )}
         {message.blocks.map((b, i) =>
           b.type === 'text' ? (
             <div key={i} class={`bubble ${me ? 'me' : 'team'}`}>
               {b.text}
             </div>
           ) : b.type === 'image' ? (
-            <button key={i} type="button" class="photo" aria-label="Open photo" onClick={() => onOpenImage(b.url)}>
-              <img src={b.url} alt="Photo" width={b.width} height={b.height} loading="lazy" />
+            <button key={i} type="button" class="photo" aria-label={t('open_photo')} onClick={() => onOpenImage(b.url)}>
+              <img src={b.url} alt={t('photo')} width={b.width} height={b.height} loading="lazy" />
             </button>
           ) : b.type === 'file' ? (
             <a key={i} class="filechip" href={b.url} target="_blank" rel="noopener" download={b.name}>
@@ -181,7 +215,7 @@ function MessageRow({ message, team, onOpenImage }: { message: Message; team: st
             </a>
           ) : (
             <div key={i} class={`bubble ${me ? 'me' : 'team'} muted`}>
-              {b.fallback}
+              {b.fallback === UNSUPPORTED_EN ? t('unsupported') : b.fallback}
             </div>
           ),
         )}
@@ -215,7 +249,7 @@ function PendingRow({ item, onRetry }: { item: Pending; onRetry: () => void }) {
           {item.failure}
         </span>
       ) : (
-        <span class="kicker">{item.attachments.length ? 'Uploading…' : 'Sending…'}</span>
+        <span class="kicker">{item.attachments.length ? t('uploading') : t('sending')}</span>
       )}
     </div>
   )
@@ -229,14 +263,14 @@ function PendingRow({ item, onRetry }: { item: Pending; onRetry: () => void }) {
 }
 
 /** Under the user's first message: it arrived, and how long a reply usually takes. Never promises who answers. */
-function Notice({ team, within, email }: { team: string; within: string; email: string | null }) {
+function Notice({ config, email }: { config: Config; email: string | null }) {
   return (
     <div class="notice" data-testid="devreply.notice">
-      <Avatar name={team} size={36} />
+      <Avatar name={config.teamName} size={36} url={config.appIconUrl} />
       <div>
-        <b>Thanks, we got it!</b>
+        <b>{t('notice.title')}</b>
         <p>
-          Please allow up to {within} for a reply. {email ? `We'll also email you at ${email}.` : "You'll see it right here."}
+          {replyAllow(config)} {email ? t('notice.email', { email }) : t('notice.here')}
         </p>
       </div>
     </div>
@@ -245,7 +279,7 @@ function Notice({ team, within, email }: { team: string; within: string; email: 
 
 function errorText(e: unknown): string {
   if (e instanceof DevReplyError && e.kind === 'invalid') return e.message.charAt(0).toUpperCase() + e.message.slice(1) + '.'
-  return "Couldn't save. Check your connection and try again."
+  return t('error.save')
 }
 
 /** Asked once, before the first message, unless the site passed a name with `DevReply.setUser`. */
@@ -273,30 +307,30 @@ function NameForm() {
   return (
     <form class="card" onSubmit={save} noValidate>
       <span>
-        <span class="kicker inv">Before we start</span>
+        <span class="kicker inv">{t('name.kicker')}</span>
       </span>
       <span style={{ fontSize: 15, fontWeight: 500 }}>
-        So the developer knows who they're talking to. Add your email to get the reply there too.
+        {t('name.text')}
       </span>
       <input
         ref={nameRef}
         class="field"
-        placeholder="Your name"
+        placeholder={t('name.placeholder')}
         autocomplete="name"
         value={name}
         onInput={(e) => setName((e.target as HTMLInputElement).value)}
         data-testid="devreply.profile.name"
-        aria-label="Your name"
+        aria-label={t('name.placeholder')}
       />
       <input
         class="field"
         type="email"
-        placeholder="Email (optional)"
+        placeholder={t('email.optional')}
         autocomplete="email"
         value={email}
         onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
         data-testid="devreply.profile.email"
-        aria-label="Email (optional)"
+        aria-label={t('email.optional')}
       />
       {error && (
         <span class="error" role="alert">
@@ -304,7 +338,7 @@ function NameForm() {
         </span>
       )}
       <button type="submit" class="btn" disabled={saving || !name.trim()} data-testid="devreply.profile.save">
-        {saving ? 'Saving…' : 'Start chatting'}
+        {saving ? t('saving') : t('name.start')}
       </button>
     </form>
   )
@@ -333,12 +367,12 @@ function EmailAsk({ onDone }: { onDone: () => void }) {
   return (
     <form class="card" onSubmit={save} noValidate>
       <div class="card-row">
-        <span class="card-title">Get the reply by email too?</span>
+        <span class="card-title">{t('email_ask.title')}</span>
         <button type="button" class="link" onClick={onDone} data-testid="devreply.emailask.skip">
-          No thanks
+          {t('no_thanks')}
         </button>
       </div>
-      <span style={{ fontSize: 13, fontWeight: 500 }}>Optional. Only about this conversation, and you can unsubscribe any time.</span>
+      <span style={{ fontSize: 13, fontWeight: 500 }}>{t('email_ask.text')}</span>
       <div class="card-row">
         <input
           class="field"
@@ -348,10 +382,10 @@ function EmailAsk({ onDone }: { onDone: () => void }) {
           value={email}
           onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
           data-testid="devreply.emailask.field"
-          aria-label="Your email"
+          aria-label={t('email_ask.placeholder')}
         />
         <button type="submit" class="btn" disabled={saving || !email.trim()} data-testid="devreply.emailask.save">
-          {saving ? '…' : 'Save'}
+          {saving ? '…' : t('save')}
         </button>
       </div>
       {error && (
@@ -417,14 +451,14 @@ function Composer({ autoFocus, onSend }: { autoFocus: boolean; onSend: (text: st
         }
       }
       if (f.size > MAX_FILE_BYTES) {
-        setPickError(`${f.name} is over 10 MB.`)
+        setPickError(t('too_big', { name: f.name }))
         continue
       }
       next.push({ kind: 'file', mime: f.type || 'application/octet-stream', data: f, filename: f.name })
     }
     setStaged((s) => {
       const all = [...s, ...next]
-      if (all.length > 4) setPickError('Up to 4 attachments per message.')
+      if (all.length > 4) setPickError(t('too_many'))
       return all.slice(0, 4)
     })
   }
@@ -445,7 +479,7 @@ function Composer({ autoFocus, onSend }: { autoFocus: boolean; onSend: (text: st
           {staged.map((a, i) => (
             <span class="thumb" key={i}>
               {a.preview ? <img src={a.preview} alt="" /> : <span>{a.filename}</span>}
-              <button type="button" class="rm" aria-label={`Remove ${a.filename ?? 'photo'}`} onClick={() => setStaged(staged.filter((x) => x !== a))}>
+              <button type="button" class="rm" aria-label={t('remove_attachment', { name: a.filename ?? t('photo') })} onClick={() => setStaged(staged.filter((x) => x !== a))}>
                 <Icon name="close" />
               </button>
             </span>
@@ -455,16 +489,16 @@ function Composer({ autoFocus, onSend }: { autoFocus: boolean; onSend: (text: st
       {pickError && <span class="error">{pickError}</span>}
       <div class="composer-row">
         <div class="attach">
-          <button type="button" class="icon-btn" aria-label="Attach a photo or file" aria-expanded={menu} onClick={() => setMenu(!menu)} data-testid="devreply.attach">
+          <button type="button" class="icon-btn" aria-label={t('attach')} aria-expanded={menu} onClick={() => setMenu(!menu)} data-testid="devreply.attach">
             <Icon name="attach" />
           </button>
           {menu && (
             <div class="menu" role="menu">
               <button type="button" role="menuitem" onClick={() => (setMenu(false), photos.current?.click())}>
-                <Icon name="photo" /> Photo
+                <Icon name="photo" /> {t('photo')}
               </button>
               <button type="button" role="menuitem" onClick={() => (setMenu(false), files.current?.click())}>
-                <Icon name="file" /> File
+                <Icon name="file" /> {t('file')}
               </button>
             </div>
           )}
@@ -474,9 +508,9 @@ function Composer({ autoFocus, onSend }: { autoFocus: boolean; onSend: (text: st
         <textarea
           ref={ref}
           rows={1}
-          placeholder="Message…"
+          placeholder={t('composer.placeholder')}
           value={draft}
-          aria-label="Message"
+          aria-label={t('composer.label')}
           data-testid="devreply.composer"
           onInput={(e) => setDraft((e.target as HTMLTextAreaElement).value)}
           onKeyDown={(e) => {
@@ -486,7 +520,7 @@ function Composer({ autoFocus, onSend }: { autoFocus: boolean; onSend: (text: st
             }
           }}
         />
-        <button type="button" class="send" aria-label="Send" disabled={!canSend} onClick={send} data-testid="devreply.send">
+        <button type="button" class="send" aria-label={t('send')} disabled={!canSend} onClick={send} data-testid="devreply.send">
           <Icon name="send" />
         </button>
       </div>

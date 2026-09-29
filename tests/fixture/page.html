@@ -24,6 +24,7 @@
     s.async = true
     s.dataset.key = q.get('key') || ''
     if (q.get('launcher')) s.dataset.launcher = q.get('launcher')
+    if (q.get('locale')) s.dataset.locale = q.get('locale')
     document.body.appendChild(s)
     addEventListener('devreply:ready', () => DevReply.onUnreadChange((n) => (document.getElementById('unread').textContent = n)))
   </script>

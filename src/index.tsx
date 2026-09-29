@@ -34,6 +34,7 @@ if (!window.DevReply) {
       launcher: (script?.dataset.launcher as LauncherMode | undefined) ?? undefined,
       apiUrl: script?.dataset.api,
       appVersion: script?.dataset.appVersion,
+      locale: script?.dataset.locale,
     })
   }
   window.dispatchEvent(new CustomEvent('devreply:ready'))

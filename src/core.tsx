@@ -3,6 +3,7 @@
 // server rendering (Next.js, Remix, SvelteKit…) is safe.
 import { render } from 'preact'
 import { type Category, CATEGORIES, SDK_VERSION } from './api'
+import { setLocaleOverride } from './i18n'
 import { type Attribute, type LauncherMode, store } from './store'
 import { type Theme, css, fontFaces, themeVars } from './styles'
 import { App } from './ui/App'
@@ -28,6 +29,8 @@ export interface Options {
   apiUrl?: string
   /** `devreply` (default): the brand fonts from api.devreply.com. `system`: the device's fonts, nothing loaded. */
   fonts?: 'devreply' | 'system'
+  /** The chat's language, e.g. `es` or `pt-BR`. Default: the browser's. */
+  locale?: string
 }
 
 let mounted = false
@@ -65,9 +68,32 @@ function configure(options: Options | string) {
   if (o.launcher) store.launcher = o.launcher
   if (o.theme) themeStyle = themeVars(o.theme)
   if (o.fonts === 'system') useBrandFonts = false
+  if (o.locale) setLocaleOverride(o.locale)
   store.configure(o.key, o.apiUrl ?? DEFAULT_API, o.appVersion)
   if (document.body) mount()
   else document.addEventListener('DOMContentLoaded', mount, { once: true })
+  // Opened from a DevReply email ("Reply in the app"): straight into that conversation.
+  handle(window.location.href, true)
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** A DevReply link (`…?devreply=<conversation id>`) opens that conversation. Returns whether it was one. */
+function handle(url: string | URL, cleanAddressBar = false): boolean {
+  let parsed: URL
+  try {
+    parsed = new URL(String(url), typeof window === 'undefined' ? 'https://x.invalid' : window.location.href)
+  } catch {
+    return false
+  }
+  const id = parsed.searchParams.get('devreply')
+  if (!id || !UUID.test(id)) return false
+  if (cleanAddressBar && typeof history !== 'undefined') {
+    parsed.searchParams.delete('devreply')
+    history.replaceState(history.state, '', parsed.pathname + parsed.search + parsed.hash)
+  }
+  void store.openFromLink(id.toLowerCase())
+  return true
 }
 
 export const DevReply = {
@@ -80,6 +106,25 @@ export const DevReply = {
   },
   close() {
     store.close()
+  },
+  /**
+   * Opens the conversation a DevReply link points to (`?devreply=<id>`, the button in DevReply's
+   * emails). `configure()` already does this for the page's own URL; call it for URLs your router
+   * handles itself. Returns false for any other URL.
+   */
+  handle(url: string | URL): boolean {
+    return handle(url)
+  },
+  /**
+   * The chat's language: `es`, `pt-BR`, `ja`… (15 languages; others fall back to English), or null to
+   * follow the browser. Takes effect at once, even with the chat open.
+   */
+  setLocale(tag: string | null) {
+    store.setLocale(tag)
+  },
+  /** The language the chat shows now, e.g. `es`. */
+  get language(): string {
+    return store.language
   },
   /** Who the user is, if the site knows. With a name set, the chat doesn't ask for one. */
   setUser(user: { name?: string; email?: string }) {

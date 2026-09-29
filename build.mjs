@@ -15,6 +15,7 @@ await build({
   jsx: 'automatic',
   jsxImportSource: 'preact',
   define: { __SDK_VERSION__: JSON.stringify(version) },
+  charset: 'utf8',
   legalComments: 'none',
   outfile: 'dist/devreply.js',
   banner: { js: `/* DevReply web SDK ${version} · https://devreply.com */` },
@@ -31,13 +32,14 @@ await build({
   jsx: 'automatic',
   jsxImportSource: 'preact',
   define: { __SDK_VERSION__: JSON.stringify(version) },
+  charset: 'utf8',
   legalComments: 'none',
   outfile: 'dist/esm/devreply.mjs',
   banner: { js: `/* DevReply web SDK ${version} · https://devreply.com */` },
 })
 execSync('npx tsc -p tsconfig.types.json', { stdio: 'inherit' })
 
-for (const f of ['archivo-black-latin.woff2', 'space-grotesk-latin.woff2']) {
+for (const f of ['archivo-black-latin.woff2', 'space-grotesk-latin.woff2', 'archivo-black-latin-ext.woff2', 'space-grotesk-latin-ext.woff2']) {
   copyFileSync(`fonts/${f}`, `dist/fonts/${f}`)
 }
 const size = readFileSync('dist/devreply.js').length

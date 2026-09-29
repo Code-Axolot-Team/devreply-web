@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'preact/hooks'
 import { icons, type IconName } from '../icons'
-import type { Category } from '../api'
+import type { Category, Config, StartButton } from '../api'
+import { intlLocale, t } from '../i18n'
+import type { StringKey } from '../strings'
 import { store } from '../store'
 
 /** Re-renders when the store (or a model) changes. */
@@ -22,8 +24,11 @@ export function CategoryIcon({ category, class: cls = 'cat' }: { category: Categ
   return <Icon name={category ?? 'other'} class={cls} />
 }
 
-/** The team's avatar: initials on a square, ink outline. */
-export function Avatar({ name, size, fill = '#fff' }: { name: string; size: number; fill?: string }) {
+/** A square face with an ink outline: the photo (app icon, persona) or initials. */
+export function Avatar({ name, size, fill = '#fff', url }: { name: string; size: number; fill?: string; url?: string | null }) {
+  if (url) {
+    return <img class="avatar" src={url} alt="" aria-hidden="true" width={size} height={size} style={{ width: size, height: size, objectFit: 'cover' }} />
+  }
   const initials =
     name
       .split(' ')
@@ -47,18 +52,31 @@ export function IconButton({ icon, label, onClick, class: cls = '' }: { icon: Ic
   )
 }
 
-export const PROMPTS: Record<Category, string> = {
-  bug: 'What happened, and what did you expect instead? A screenshot helps a lot.',
-  billing: "Tell us what's wrong with your purchase or subscription.",
-  idea: 'What would make the app better for you?',
-  question: 'What would you like to know?',
-  other: 'How can we help?',
+/** The empty chat's question for each kind of request. */
+export const prompt = (c: Category) => t(`prompt.${c}` as StringKey)
+
+// Texts the server sends: in the user's language while they're DevReply's defaults (`localize`),
+// as written when the team wrote their own.
+const localized = (c: Config, field: string) => c.localize.includes(field)
+export const greeting = (c: Config) => (localized(c, 'greeting') ? t('greeting') : c.greeting)
+export const intro = (c: Config) => (localized(c, 'intro') ? t('intro') : c.intro)
+export const buttonTitle = (c: Config, b: StartButton) =>
+  localized(c, 'start_buttons') ? t(`category.${b.category}` as StringKey) : b.title
+export const categoryTitle = (c: Config, cat: Category) => {
+  const b = c.startButtons.find((x) => x.category === cat)
+  return b ? buttonTitle(c, b) : t(`category.${cat}` as StringKey)
 }
+const knownTime = (k: string | null) => k !== null && ['hour', 'hours', 'day', '2_days', '3_working_days', 'week'].includes(k)
+/** "Usually replies within 3 working days", in the user's language. */
+export const replyTime = (c: Config) => (knownTime(c.replyWithinKey) ? t(`reply_time.${c.replyWithinKey}` as StringKey) : c.replyTime)
+/** "Please allow up to 3 working days for a reply.", in the user's language. */
+export const replyAllow = (c: Config) =>
+  knownTime(c.replyWithinKey) ? t(`reply_allow.${c.replyWithinKey}` as StringKey) : `Please allow up to ${c.replyWithin} for a reply.`
 
 /** "2 minutes ago", "yesterday", like the mobile SDKs. */
 export function relative(iso: string): string {
   const s = Math.round((Date.now() - new Date(iso).getTime()) / 1000)
-  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
+  const rtf = new Intl.RelativeTimeFormat(intlLocale(), { numeric: 'auto' })
   if (s < 60) return rtf.format(0, 'second') === 'now' ? 'now' : rtf.format(-s, 'second')
   if (s < 3600) return rtf.format(-Math.round(s / 60), 'minute')
   if (s < 86400) return rtf.format(-Math.round(s / 3600), 'hour')
