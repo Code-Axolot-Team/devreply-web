@@ -48,7 +48,8 @@
     "dist/esm",
     "dist/types",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "sideEffects": false,
   "publishConfig": {
