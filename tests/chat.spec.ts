@@ -185,3 +185,16 @@ test('a long chat: every new message shows at the bottom, above the composer @sm
   const mine = texts.filter((t) => t.startsWith(`Long test ${nonce} `)).map((t) => Number(t.split(' ').pop()))
   expect(mine).toEqual([...mine].sort((a, b) => a - b))
 })
+
+test('the npm package works in an app of its own: no globals, fonts from DevReply @smoke', async ({ page }) => {
+  await page.goto(`/module.html?key=${pk}&launcher=none`)
+  await expect.poll(() => page.evaluate(() => (window as unknown as { ready?: string }).ready)).toBe(
+    JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version,
+  )
+  expect(await page.evaluate(() => 'DevReply' in window)).toBe(false)
+  await expect(page.getByTestId('devreply.launcher')).toHaveCount(0)
+  await page.locator('#help').click()
+  await expect(page.getByTestId('devreply.panel')).toBeVisible()
+  await expect(page.getByText('What would you like to know?')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => document.fonts.check('16px "DevReply Space Grotesk"')), { timeout: 10_000 }).toBe(true)
+})

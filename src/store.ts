@@ -78,11 +78,12 @@ function device(appVersion?: string): Device {
   }
 }
 
-class Store {
+export class Store {
   client: ApiClient | null = null
   publicKey: string | null = null
   appVersion: string | undefined
-  config: Config = placeholderConfig(document.title || location.hostname)
+  // No document on the server (SSR): the real name arrives with the config.
+  config: Config = placeholderConfig(typeof document === 'undefined' ? '' : document.title || location.hostname)
   conversations: Conversation[] = []
   profile: Profile | null = null
   lastError: DevReplyError | null = null

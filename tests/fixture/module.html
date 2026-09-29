@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fox Notes (bundled)</title></head>
+<body>
+  <h1>Fox Notes</h1>
+  <button id="help">Help</button>
+  <p>Unread: <span id="unread">0</span></p>
+  <!-- What a bundled app does: import the npm package, configure, open from its own button. -->
+  <script type="module">
+    import DevReply from '/dist/esm/devreply.mjs'
+    const q = new URLSearchParams(location.search)
+    DevReply.configure({ key: q.get('key'), launcher: q.get('launcher') ?? undefined })
+    DevReply.onUnreadChange((n) => (document.getElementById('unread').textContent = n))
+    document.getElementById('help').addEventListener('click', () => DevReply.open('question'))
+    window.ready = DevReply.version
+  </script>
+</body>
+</html>

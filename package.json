@@ -1,21 +1,57 @@
 {
   "name": "@devreply/web",
-  "version": "0.3.1",
-  "description": "DevReply for web apps: the in-app chat between your users and you. One script, no dependencies on the page.",
+  "version": "0.3.2",
+  "description": "DevReply for web apps: the in-app chat between your users and you. Works with any framework; renders in a shadow root.",
   "license": "MIT",
-  "private": true,
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "playwright test"
-  },
-  "dependencies": {
-    "preact": "^10.29.8"
+    "test": "playwright test",
+    "prepublishOnly": "node build.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "esbuild": "^0.28.2",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "preact": "^10.29.8"
+  },
+  "keywords": [
+    "devreply",
+    "chat",
+    "support",
+    "customer-support",
+    "feedback",
+    "widget",
+    "in-app-messaging"
+  ],
+  "homepage": "https://devreply.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Code-Axolot-Team/devreply-web.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Code-Axolot-Team/devreply-web/issues"
+  },
+  "author": "Code Axolot <hello@devreply.com> (https://devreply.com)",
+  "main": "./dist/esm/devreply.mjs",
+  "module": "./dist/esm/devreply.mjs",
+  "types": "./dist/types/module.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/module.d.ts",
+      "import": "./dist/esm/devreply.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/esm",
+    "dist/types",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
   }
 }

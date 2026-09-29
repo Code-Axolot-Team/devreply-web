@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { extname, join, normalize } from 'node:path'
 
 const root = new URL('..', import.meta.url).pathname
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.woff2': 'font/woff2' }
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.woff2': 'font/woff2' }
 createServer(async (req, res) => {
   const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^(\.\.[/\\])+/, '')
   const file = path === '/' ? 'tests/fixture/page.html' : path.startsWith('/dist/') ? path.slice(1) : join('tests/fixture', path)

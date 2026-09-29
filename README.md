@@ -4,6 +4,23 @@ The in-app chat between your web app's users and you, answered from the
 [DevReply dashboard](https://app.devreply.com). One script, rendered in a shadow root: your site's CSS can't
 reach it and it never touches yours.
 
+Two ways in, same chat, same API:
+
+**npm** (Next.js, Vite, Remix, SvelteKit, Vue, Angular…):
+
+```sh
+npm install @devreply/web
+```
+
+```ts
+import DevReply from '@devreply/web'
+
+DevReply.configure({ key: 'pk_…' })   // once, in the browser (safe to import during server rendering)
+DevReply.open()                       // from any button, or let the launcher do it
+```
+
+**Script tag** (any site, no build step):
+
 ```html
 <script src="https://api.devreply.com/sdk/web/v0/devreply.js" data-key="pk_…" async></script>
 ```
@@ -17,6 +34,25 @@ the dashboard: it has your key and does this for you.
 - Home with start buttons, the user's conversations, and the chat: photos and files, name first, optional email,
   "we got it" with your reply time. Full screen on phones, a panel on desktop.
 
+## React
+
+No wrapper needed: configure once, and keep the unread count in state if you show it.
+
+```tsx
+import DevReply from '@devreply/web'
+import { useEffect, useState } from 'react'
+
+DevReply.configure({ key: 'pk_…', launcher: 'unread' })
+
+export function HelpButton() {
+  const [unread, setUnread] = useState(0)
+  useEffect(() => DevReply.onUnreadChange(setUnread), [])
+  return <button onClick={() => DevReply.open()}>Help{unread > 0 ? ` (${unread})` : ''}</button>
+}
+```
+
+In Next.js, call `configure` from a client component (`'use client'`) or a `useEffect`.
+
 ## API
 
 ```js
@@ -28,6 +64,7 @@ window.addEventListener('devreply:ready', () => {
 DevReply.open()          // or open('bug')
 DevReply.close()
 DevReply.configure({ key: 'pk_…', launcher: 'unread', theme: { primary: '#F6EB37', accent: '#FF5FA2' } })
+DevReply.configure({ key: 'pk_…', fonts: 'system' })   // no brand fonts loaded from api.devreply.com
 ```
 
 If your site sends a Content-Security-Policy: `script-src` and `font-src https://api.devreply.com`,
@@ -37,7 +74,7 @@ If your site sends a Content-Security-Policy: `script-src` and `font-src https:/
 
 ```sh
 npm ci
-npm run typecheck && npm run build        # dist/devreply.js + fonts
+npm run typecheck && npm run build        # dist/devreply.js + fonts (script tag), dist/esm + dist/types (npm)
 ```
 
 Live tests (Playwright; Chromium, WebKit, a phone profile) need a throwaway app's web key, and for the launcher
