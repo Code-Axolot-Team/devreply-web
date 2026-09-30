@@ -44,6 +44,9 @@ export interface OpenOptions {
   message?: string
   /** Context the team sees on that new conversation only: at most 20, text, number or true/false. */
   attributes?: Record<string, string | number | boolean>
+  /** `false` skips "Before we start" (the name form) while the messenger is open, e.g. from a failed payment,
+   *  where one tap to the message matters more than a name. The team sees the user unnamed. */
+  askName?: boolean
 }
 
 let mounted = false
@@ -57,7 +60,7 @@ function setTheme(themes: { light?: Theme | null; dark?: Theme | null }) {
   store.emit()
 }
 
-/** `open()`, `open('bug')`, `open({ category, message, attributes })` or `open('bug', { message, attributes })`. */
+/** `open()`, `open('bug')`, `open({ category, message, attributes, askName })` or `open('bug', { message, attributes, askName })`. */
 function open(categoryOrOptions?: Category | OpenOptions | null, more?: OpenOptions): boolean {
   const o: OpenOptions =
     categoryOrOptions && typeof categoryOrOptions === 'object'
@@ -69,6 +72,7 @@ function open(categoryOrOptions?: Category | OpenOptions | null, more?: OpenOpti
   return store.open(c ? { screen: 'chat', conversationId: null, category: c } : undefined, {
     ...(message ? { message } : {}),
     ...(Object.keys(context).length ? { context } : {}),
+    ...(o.askName === false ? { skipName: true } : {}),
   })
 }
 
@@ -155,7 +159,7 @@ export const DevReply = {
     return handle(url)
   },
   /**
-   * The chat's language: `es`, `pt-BR`, `ja`… (15 languages; others fall back to English), or null to
+   * The chat's language: `es`, `pt-BR`, `ja`… (34 languages; others fall back to English), or null to
    * follow the browser. Takes effect at once, even with the chat open.
    */
   setLocale(tag: string | null) {

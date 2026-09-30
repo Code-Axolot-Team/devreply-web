@@ -42,7 +42,8 @@ export const LIGHT =
   '--dr-on-accent:var(--dr-ink);--dr-card:var(--dr-primary);--dr-on-card:var(--dr-ink);' +
   '--dr-team:var(--dr-surface);--dr-team-text:var(--dr-ink);--dr-notice:var(--dr-surface);' +
   '--dr-lemon:#F6EB37;--dr-on-lemon:var(--dr-ink);--dr-badge:#FF5FA2;--dr-badge-outline:var(--dr-outline);--dr-tag-bg:var(--dr-ink);--dr-tag-text:var(--dr-lemon);' +
-  '--dr-focus:var(--dr-user);--dr-overlay:rgba(17,17,17,.94);--dr-placeholder:rgba(74,71,64,.7);--dr-grey:#E9E6D8;'
+  '--dr-focus:var(--dr-user);--dr-overlay:rgba(17,17,17,.94);--dr-placeholder:rgba(74,71,64,.7);--dr-grey:#E9E6D8;' +
+  '--dr-code:#F1EEE3;'
 
 /** DevReply's dark palette (0.4.4), "Deep blue": `configure({ key, darkTheme })` uses it whenever the
  *  browser prefers dark. The one place the dark defaults live. */
@@ -139,6 +140,8 @@ export function darkThemeVars(t: Theme): string {
     team: surface,
     grey: surface,
     'team-text': c.ink,
+    // Code in team replies (0.5.0): a step further from the bubble toward the text.
+    code: mix(surface, c.ink, 0.1),
     'on-card': c.ink,
     muted,
     placeholder: faded(muted),
@@ -189,11 +192,12 @@ svg{display:block;width:100%;height:100%}
 
 /* ---- launcher ---- */
 .launcher{position:fixed;right:20px;bottom:20px;z-index:2147483000;width:60px;height:60px;border-radius:50%;
-  background:var(--dr-lemon);border:calc(3px * var(--dr-ow)) solid var(--dr-outline);box-shadow:4px 4px 0 var(--dr-shadow);display:grid;place-items:center;
+  background:#111;border:3px solid #111;box-shadow:4px 4px 0 #FF5FA2;display:grid;place-items:center;
   transition:transform .12s,box-shadow .12s;animation:dr-pop .4s cubic-bezier(.3,1.6,.5,1)}
-.launcher:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--dr-shadow)}
-.launcher .mark{width:32px;height:32px;margin-top:3px}
-.launcher .x{width:24px;height:24px;color:var(--dr-on-lemon)}
+.launcher:active{transform:translate(3px,3px);box-shadow:1px 1px 0 #FF5FA2}
+/* The DevReply star always sits on black (spec 11), like devreply.com's launcher. */
+.launcher .mark{width:40px;height:40px}
+.launcher .x{width:24px;height:24px;color:#F5EF3D}
 .badge{position:absolute;top:-8px;right:-8px;min-width:24px;height:24px;padding:0 6px;border-radius:12px;background:var(--dr-badge);
   border:calc(2.5px * var(--dr-ow)) solid var(--dr-badge-outline);font:700 13px/19px var(--dr-text);text-align:center;color:var(--dr-on-lemon)}
 @keyframes dr-pop{from{transform:scale(.2);opacity:0}to{transform:scale(1);opacity:1}}
@@ -211,6 +215,7 @@ svg{display:block;width:100%;height:100%}
 
 /* ---- shared ---- */
 .kicker{font:700 12px/1 var(--dr-text);letter-spacing:.1em;text-transform:uppercase}
+[dir=rtl] .kicker{letter-spacing:0}
 .kicker.inv{display:inline-block;background:var(--dr-tag-bg);color:var(--dr-tag-text);padding:5px 8px}
 .brutal{background:var(--dr-surface);border:calc(3px * var(--dr-ow)) solid var(--dr-outline);box-shadow:5px 5px 0 var(--dr-shadow)}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--dr-accent);border:calc(3px * var(--dr-ow)) solid var(--dr-outline);
@@ -249,7 +254,7 @@ svg{display:block;width:100%;height:100%}
 .conv .cat{width:28px;height:28px;flex:none}
 .conv-text{flex:1;min-width:0}
 .conv-top{display:flex;gap:8px;align-items:baseline}
-.conv-top .when{margin-left:auto;font-size:12px;color:var(--dr-muted);white-space:nowrap}
+.conv-top .when{margin-inline-start:auto;font-size:12px;color:var(--dr-muted);white-space:nowrap}
 .conv-last{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .resolved{font-size:11px;font-weight:700;padding:1px 6px;color:var(--dr-on-lemon);background:var(--dr-resolved);border:calc(1.5px * var(--dr-ow)) solid var(--dr-outline)}
 .conv.closed{opacity:.7}
@@ -263,7 +268,7 @@ svg{display:block;width:100%;height:100%}
 .bar-name{font:16px/1.1 var(--dr-display);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bar-sub{font-size:11px;font-weight:500;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bar-text{flex:1;min-width:0}
-.bar .close{margin-left:auto}
+.bar .close{margin-inline-start:auto}
 /* Inverted: newest at the bottom, pinned there by the layout; nothing ever scrolls in code. */
 .thread{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column-reverse;padding:8px 16px 12px}
 .thread-inner{display:flex;flex-direction:column;gap:10px}
@@ -272,24 +277,50 @@ svg{display:block;width:100%;height:100%}
 .empty h2{font:26px/1.1 var(--dr-display);margin:0}
 .empty p{margin:0;font-size:16px;font-weight:500;color:var(--dr-muted)}
 .time{text-align:center;padding-top:12px}
-.row.persona{padding-right:48px}
+.row.persona{padding-inline-end:48px}
 .by{display:flex;align-items:center;gap:7px;margin:4px 0 2px;font-size:13px}
 .by b{font-weight:700}
 .by .muted{font-size:12px}
 .by .avatar{border-width:calc(2px * var(--dr-ow))}
 .reply-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .faces{display:flex}
-.faces .avatar{margin-left:-8px;box-shadow:none}
-.faces .avatar:first-child{margin-left:0}
+.faces .avatar{margin-inline-start:-8px;box-shadow:none}
+.faces .avatar:first-child{margin-inline-start:0}
 .row{display:flex;align-items:flex-end;gap:10px}
-.row.me{justify-content:flex-end;padding-left:48px}
-.row.team{padding-right:48px}
+.row.me{justify-content:flex-end;padding-inline-start:48px}
+.row.team{padding-inline-end:48px}
 .stack{display:flex;flex-direction:column;gap:8px;min-width:0}
 .row.me .stack{align-items:flex-end}
 .bubble{padding:11px 14px;font-size:17px;font-weight:500;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:14px}
 .bubble.me{background:var(--dr-user);color:var(--dr-user-text)}
 .bubble.team{color:var(--dr-team-text);background:var(--dr-team);border:calc(2.5px * var(--dr-ow)) solid var(--dr-outline);box-shadow:3px 3px 0 var(--dr-shadow)}
 .bubble.muted{color:var(--dr-muted)}
+/* Team replies in Markdown (0.5.0): elements, never HTML strings. Logical sides, so quotes and lists follow RTL. */
+.md{display:flex;flex-direction:column;gap:8px;min-width:0}
+.md p,.md ul,.md ol,.md blockquote,.md pre{margin:0}
+.md .md-h{font-weight:700;font-size:19px;line-height:1.25}
+.md ul,.md ol{padding-inline-start:24px;display:flex;flex-direction:column;gap:4px}
+.md li::marker{font-weight:700}
+.md strong{font-weight:700}
+.md a{color:inherit;font-weight:700;text-decoration:underline;text-decoration-color:var(--dr-accent);text-decoration-thickness:3px;text-underline-offset:3px}
+.md code{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;font-size:.86em;padding:1px 5px;background:var(--dr-code);
+  border:calc(1.5px * var(--dr-ow)) solid var(--dr-outline);border-radius:4px}
+.md pre{overflow-x:auto;padding:10px 12px;background:var(--dr-code);border:calc(2px * var(--dr-ow)) solid var(--dr-outline);border-radius:6px;white-space:pre;
+  text-align:left;overscroll-behavior-x:contain}
+.md pre code{padding:0;border:0;background:none;font-size:14px;line-height:1.45;border-radius:0}
+.md blockquote{padding-inline-start:12px;border-inline-start:4px solid var(--dr-outline);color:var(--dr-muted);font-style:normal}
+/* Button replies (0.5.0): the options under the question, Loud like the start tiles. Chosen: the primary
+   colour and a check; the rest go quiet. */
+.choices{display:flex;flex-direction:column;align-items:stretch;gap:8px;max-width:300px;margin-top:2px}
+.choice{display:flex;align-items:center;gap:10px;min-height:44px;padding:10px 14px;text-align:start;color:var(--dr-ink);background:var(--dr-surface);
+  border:calc(2.5px * var(--dr-ow)) solid var(--dr-outline);box-shadow:3px 3px 0 var(--dr-shadow);font-size:16px;font-weight:700;line-height:1.25;
+  overflow-wrap:anywhere;transition:transform .08s,box-shadow .08s,background-color .08s}
+@media (hover:hover){.choice:hover:not(:disabled){color:var(--dr-on-primary);background:var(--dr-primary)}}
+.choice:active:not(:disabled){transform:translate(2px,2px);box-shadow:1px 1px 0 var(--dr-shadow)}
+.choice-label{flex:1;min-width:0}
+.choice-check{flex:none;font-size:17px;line-height:1}
+.choice.chosen{color:var(--dr-on-primary);background:var(--dr-primary);border-width:calc(3px * var(--dr-ow))}
+.choices.answered .choice:not(.chosen){opacity:.45;box-shadow:none;font-weight:600}
 .system{text-align:center;font-size:13px;font-weight:700;color:var(--dr-muted);padding:6px 0}
 .photo{display:block;max-width:220px;max-height:260px;border:calc(3px * var(--dr-ow)) solid var(--dr-outline);box-shadow:4px 4px 0 var(--dr-shadow);background:var(--dr-grey);cursor:zoom-in}
 .photo img{display:block;max-width:214px;max-height:254px;object-fit:cover}
@@ -323,7 +354,8 @@ svg{display:block;width:100%;height:100%}
 .send:active:not(:disabled){transform:translate(2px,2px);box-shadow:1px 1px 0 var(--dr-shadow)}
 .attach{position:relative}
 .attach .icon-btn{width:46px;height:46px}
-.menu{position:absolute;bottom:56px;left:0;background:var(--dr-surface);border:calc(3px * var(--dr-ow)) solid var(--dr-outline);box-shadow:4px 4px 0 var(--dr-shadow);display:flex;flex-direction:column;min-width:150px;z-index:2}
+[dir=rtl] .flips svg{transform:scaleX(-1)}
+.menu{position:absolute;bottom:56px;inset-inline-start:0;background:var(--dr-surface);border:calc(3px * var(--dr-ow)) solid var(--dr-outline);box-shadow:4px 4px 0 var(--dr-shadow);display:flex;flex-direction:column;min-width:150px;z-index:2}
 .menu button{display:flex;align-items:center;gap:10px;padding:12px 14px;font-weight:600}
 .menu button:hover{color:var(--dr-on-lemon);background:var(--dr-lemon)}
 .menu .i{width:20px;height:20px}
@@ -331,11 +363,11 @@ svg{display:block;width:100%;height:100%}
 .thumb{position:relative;width:64px;height:64px;flex:none;border:calc(2.5px * var(--dr-ow)) solid var(--dr-outline);color:var(--dr-on-lemon);background:var(--dr-lemon);display:grid;place-items:center;
   font-size:10px;font-weight:700;text-align:center;overflow:hidden}
 .thumb img{width:100%;height:100%;object-fit:cover}
-.thumb .rm{position:absolute;top:-2px;right:-2px;width:22px;height:22px;color:var(--dr-on-lemon);background:var(--dr-badge);border:calc(2px * var(--dr-ow)) solid var(--dr-outline);display:grid;place-items:center}
+.thumb .rm{position:absolute;top:-2px;inset-inline-end:-2px;width:22px;height:22px;color:var(--dr-on-lemon);background:var(--dr-badge);border:calc(2px * var(--dr-ow)) solid var(--dr-outline);display:grid;place-items:center}
 .thumb .rm .i{width:12px;height:12px}
 .viewer{position:absolute;inset:0;z-index:3;background:var(--dr-overlay);display:grid;place-items:center;padding:20px}
 .viewer img{max-width:100%;max-height:100%;object-fit:contain}
-.viewer .icon-btn{position:absolute;top:16px;right:16px;color:var(--dr-on-lemon);background:var(--dr-lemon)}
+.viewer .icon-btn{position:absolute;top:16px;inset-inline-end:16px;color:var(--dr-on-lemon);background:var(--dr-lemon)}
 .i{display:inline-block}
 .spin{width:24px;height:24px;border:3px solid var(--dr-ink);border-top-color:transparent;border-radius:50%;animation:dr-spin .8s linear infinite;margin:40px auto}
 @keyframes dr-spin{to{transform:rotate(360deg)}}

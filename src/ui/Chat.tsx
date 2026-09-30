@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks'
-import { type Category, type Config, DevReplyError, type Message, type Outgoing } from '../api'
+import { type Block, type ButtonOption, type Category, type Config, DevReplyError, type Message, type Outgoing } from '../api'
 import { intlLocale, t } from '../i18n'
 import { ConversationModel, type Pending, store } from '../store'
+import { parseMarkdown, plainMarkdown } from '../markdown'
+import { Markdown } from './Markdown'
 import { Avatar, CategoryIcon, Icon, IconButton, categoryTitle, fileSize, prompt, replyAllow, replyTime, useStore, useSubscribe } from './parts'
 
 /** The fallback text the API parser writes for blocks this SDK can't show. */
@@ -45,8 +47,15 @@ export function Chat({ conversationId, category }: { conversationId: string | nu
   useEffect(() => {
     void store.loadProfileIfNeeded()
     void model.load()
-    const t = window.setInterval(() => void model.load(), 3_000)
-    return () => window.clearInterval(t)
+    const detach = store.attach(model)
+    // The 3 s poll pauses while the live socket is up (0.5.0) and picks up again whenever it's down.
+    const t = window.setInterval(() => {
+      if (!store.live.isLive) void model.load()
+    }, 3_000)
+    return () => {
+      window.clearInterval(t)
+      detach()
+    }
   }, [model])
   useEffect(() => {
     store.visibleConversation = model.conversationId
@@ -127,6 +136,8 @@ export function Chat({ conversationId, category }: { conversationId: string | nu
                   team={s.config.teamName}
                   icon={s.config.appIconUrl}
                   onOpenImage={setViewing}
+                  answer={model.answerTo(it.message.id)}
+                  onAnswer={(option) => model.answer(it.message.id, option)}
                 />
               ) : it.kind === 'pending' ? (
                 <PendingRow key={it.key} item={it.item} onRetry={() => model.retry(it.item)} />
@@ -171,12 +182,17 @@ function MessageRow({
   team,
   icon,
   onOpenImage,
+  answer,
+  onAnswer,
 }: {
   message: Message
   showsPersona: boolean
   team: string
   icon: string | null
   onOpenImage: (url: string) => void
+  /** Buttons questions (0.5.0): the chosen option, null if answered elsewhere, undefined while open. */
+  answer: string | null | undefined
+  onAnswer: (option: ButtonOption) => void
 }) {
   if (message.author === 'system') {
     // e.g. "✓ Marked as resolved…": a quiet line, not a bubble. Known lines in the user's language.
@@ -201,6 +217,25 @@ function MessageRow({
             <div key={i} class={`bubble ${me ? 'me' : 'team'}`}>
               {b.text}
             </div>
+          ) : b.type === 'markdown' ? (
+            // Team and agent replies only: the user's own messages stay plain text.
+            me ? (
+              <div key={i} class="bubble me">
+                {b.fallback}
+              </div>
+            ) : (
+              <div key={i} class="bubble team md" data-testid="devreply.markdown">
+                <Markdown text={b.text} />
+              </div>
+            )
+          ) : b.type === 'buttons' ? (
+            me ? (
+              <div key={i} class="bubble me">
+                {b.fallback}
+              </div>
+            ) : (
+              <Buttons key={i} block={b} answer={answer} onAnswer={onAnswer} />
+            )
           ) : b.type === 'image' ? (
             <button key={i} type="button" class="photo" aria-label={t('open_photo')} onClick={() => onOpenImage(b.url)}>
               <img src={b.url} alt={t('photo')} width={b.width} height={b.height} loading="lazy" />
@@ -223,6 +258,52 @@ function MessageRow({
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * A question with answer buttons (0.5.0): the question as a team bubble, the options under it. A tap
+ * answers once; then the chosen one stays highlighted and the others go quiet. Typing works as always.
+ */
+function Buttons({
+  block,
+  answer,
+  onAnswer,
+}: {
+  block: Extract<Block, { type: 'buttons' }>
+  answer: string | null | undefined
+  onAnswer: (option: ButtonOption) => void
+}) {
+  const answered = answer !== undefined
+  return (
+    <>
+      <div class="bubble team md" data-testid="devreply.buttons.question">
+        <Markdown text={block.text} />
+      </div>
+      <div class={`choices ${answered ? 'answered' : ''}`} role="group" aria-label={plainMarkdown(parseMarkdown(block.text))} data-testid="devreply.buttons">
+        {block.options.map((o) => {
+          const chosen = answered && o.id === answer
+          return (
+            <button
+              key={o.id}
+              type="button"
+              class={`choice ${chosen ? 'chosen' : ''}`}
+              disabled={answered}
+              aria-pressed={answered ? chosen : undefined}
+              onClick={() => onAnswer(o)}
+              data-testid={`devreply.buttons.option.${o.id}`}
+            >
+              <span class="choice-label">{o.label}</span>
+              {chosen && (
+                <span class="choice-check" aria-hidden="true">
+                  ✓
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+    </>
   )
 }
 

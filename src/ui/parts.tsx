@@ -25,7 +25,9 @@ export function useStore() {
 export const DarkLook = createContext(false)
 
 export function Icon({ name, class: cls = 'i' }: { name: IconName; class?: string }) {
-  return <span class={cls} aria-hidden="true" dangerouslySetInnerHTML={{ __html: icons[name] }} />
+  // Arrows that point along the reading direction flip in right-to-left languages (styles: [dir=rtl]).
+  const flips = name === 'back' || name === 'arrow'
+  return <span class={flips ? `${cls} flips` : cls} aria-hidden="true" dangerouslySetInnerHTML={{ __html: icons[name] }} />
 }
 
 /** The category's artwork, drawn for the light or the dark look. */
@@ -87,8 +89,10 @@ export const replyAllow = (c: Config) =>
 /** "2 minutes ago", "yesterday", like the mobile SDKs. */
 export function relative(iso: string): string {
   const s = Math.round((Date.now() - new Date(iso).getTime()) / 1000)
-  const rtf = new Intl.RelativeTimeFormat(intlLocale(), { numeric: 'auto' })
-  if (s < 60) return rtf.format(0, 'second') === 'now' ? 'now' : rtf.format(-s, 'second')
+  const intl = new Intl.RelativeTimeFormat(intlLocale(), { numeric: 'auto' })
+  // Chromium's Hebrew adds the number in brackets to words that already say it ("לפני שעתיים (2)").
+  const rtf = { format: (n: number, unit: Intl.RelativeTimeFormatUnit) => intl.format(n, unit).replace(/ \(\d+\)$/, '') }
+  if (s < 60) return intl.format(0, 'second') === 'now' ? 'now' : rtf.format(-s, 'second')
   if (s < 3600) return rtf.format(-Math.round(s / 60), 'minute')
   if (s < 86400) return rtf.format(-Math.round(s / 3600), 'hour')
   return rtf.format(-Math.round(s / 86400), 'day')

@@ -34,7 +34,7 @@ the dashboard: it has your key and does this for you.
 - Home with start buttons, the user's conversations, and the chat: photos and files, name first, optional email,
   "we got it" with your reply time. Full screen on phones, a panel on desktop.
 - Each reply shows who wrote it (the teammate's name, title and photo), and the header shows your app icon.
-- 15 languages, the browser's by default: `configure({ key, locale: 'es' })`, `data-locale="es"`, or
+- 34 languages (Hebrew and Arabic right to left), the browser's by default: `configure({ key, locale: 'es' })`, `data-locale="es"`, or
   `DevReply.setLocale('es')` at any time.
 - Replies from email: DevReply's "Reply in the app" button opens your web app with `?devreply=<conversation>`, and
   the script opens that conversation (set your web app's address in the dashboard, the app → Settings).
@@ -90,6 +90,8 @@ DevReply.open({ category: 'bug', message: 'The export button does nothing', attr
 - `attributes` go with that new conversation only, as its context (the team sees them on the conversation, not on
   the user): at most 20, names of 1–40 letters, digits, `_ - .` or spaces, values text, number or true/false.
   Anything else is left out with a console warning. Existing conversations are left alone.
+- `askName: false` skips "Before we start" (the name form) while the messenger is open, for a screen where one tap
+  to the message matters more than a name, like a failed payment. The email ask after the first message stays.
 - `open('bug', { message, attributes })` works too, and `DevReply.present(…)` is the same function (the name the
   iOS and Android SDKs use).
 
@@ -136,7 +138,8 @@ else is derived from them; other keys are ignored.
   whichever reads better. The launcher, the team tag and unread counts stay DevReply's lemon.
 
 If your site sends a Content-Security-Policy: `script-src` and `font-src https://api.devreply.com`,
-`connect-src https://api.devreply.com https://storage.googleapis.com`,
+`connect-src https://api.devreply.com wss://api.devreply.com https://storage.googleapis.com` (`wss:` for live updates;
+without it the chat still works, polling every 3 s),
 `img-src https://api.devreply.com https://storage.googleapis.com blob:` (team photos and your app icon).
 
 ## Sign-in, sign-out and account deletion

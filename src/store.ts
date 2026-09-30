@@ -2,7 +2,9 @@
 // the user's conversations and profile. Views subscribe and re-render on change.
 
 import {
+  type Answer,
   ApiClient,
+  type ButtonOption,
   type Category,
   type Config,
   type Context,
@@ -18,6 +20,7 @@ import {
   placeholderConfig,
 } from './api'
 import { language, localeTag, setLocaleOverride, t } from './i18n'
+import { Live } from './live'
 
 export type Attribute = string | number | boolean | null
 export type LauncherMode = 'always' | 'unread' | 'none'
@@ -43,6 +46,8 @@ export type DevReplyEvent = keyof DevReplyEvents
 export interface Presentation {
   message?: string
   context?: Context
+  /** `askName: false`: no name form while this presentation is open. */
+  skipName?: boolean
 }
 
 /** The DevReply account deletions still to do (0.4.4): old install tokens, kept until the server says done. */
@@ -65,6 +70,16 @@ const storage = {
       /* not available */
     }
   },
+}
+
+/** 32 random bytes as base64url, no padding (43 characters); null if the browser has no crypto. */
+function randomKey(): string | null {
+  try {
+    const bytes = crypto.getRandomValues(new Uint8Array(32))
+    return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  } catch {
+    return null
+  }
 }
 
 /** The first pattern that matches, formatted with its first group. */
@@ -132,6 +147,25 @@ export class Store {
   private polling: number | null = null
   private events = new Map<DevReplyEvent, Set<(payload: never) => void>>()
   private deleting = false
+  /** The device key when localStorage can't keep it: this page keeps using the same one. */
+  private memoryDeviceKey: { publicKey: string; key: string } | null = null
+  /** Conversations on screen (0.5.0): live messages go straight into their threads. */
+  private models = new Set<ConversationModel>()
+  private refreshTimer: number | null = null
+
+  /** Live updates (0.5.0, spec 05): a WebSocket while the messenger is open and the tab visible. */
+  readonly live = new Live({
+    ticket: () => this.authorized((api, t) => api.liveTicket(t)),
+    onMessage: (conversationId, message) => this.liveMessage(conversationId, message),
+    onChange: (live) => {
+      // Just connected: one catch-up over HTTP for anything sent while the socket was being set up.
+      if (live) {
+        void this.refresh()
+        for (const m of this.models) void m.load()
+      }
+      this.emit()
+    },
+  })
 
   /** `DevReply.on`: any number of listeners; a listener that throws never breaks the chat. */
   on<E extends DevReplyEvent>(event: E, fn: (payload: DevReplyEvents[E]) => void): () => void {
@@ -173,7 +207,7 @@ export class Store {
   }
 
   get needsName(): boolean {
-    return !this.profile?.name?.trim()
+    return !this.presentation.skipName && !this.profile?.name?.trim()
   }
 
   configure(publicKey: string, apiUrl: string, appVersion?: string) {
@@ -182,6 +216,7 @@ export class Store {
     this.appVersion = appVersion
     this.registering = null
     this.conversations = []
+    this.live.reset()
     const cached = storage.get(this.configKey)
     if (cached) {
       try {
@@ -217,6 +252,31 @@ export class Store {
     return `devreply:config:${this.publicKey ?? ''}`
   }
 
+  /** This browser's device key for the app (0.5.0): per public key, never removed by logout. */
+  private get deviceStorageKey() {
+    return `devreply:device:${this.publicKey ?? ''}`
+  }
+
+  /**
+   * A random 256-bit secret of this browser for the app (spec 03, "Same device after logout"), created
+   * once and kept through logout: back on this device, the same account gets its conversations back.
+   */
+  deviceKey(): string | null {
+    const pk = this.publicKey
+    if (!pk) return null
+    const stored = storage.get(this.deviceStorageKey)
+    if (stored && /^[A-Za-z0-9_-]{43}$/.test(stored)) return stored
+    if (this.memoryDeviceKey?.publicKey === pk) {
+      storage.set(this.deviceStorageKey, this.memoryDeviceKey.key)
+      return this.memoryDeviceKey.key
+    }
+    const key = randomKey()
+    if (!key) return null
+    this.memoryDeviceKey = { publicKey: pk, key }
+    storage.set(this.deviceStorageKey, key)
+    return key
+  }
+
   private get deletionsKey() {
     return `devreply:pending-deletions:${this.client?.baseUrl ?? ''}|${this.publicKey ?? ''}`
   }
@@ -232,7 +292,7 @@ export class Store {
     if (Date.now() < this.keyRefusedUntil) throw new DevReplyError('invalidKey')
     if (!this.registering) {
       this.registering = client
-        .register(pk, device(this.appVersion))
+        .register(pk, device(this.appVersion), this.deviceKey())
         .then((t) => {
           storage.set(this.tokenKey, t)
           this.keyRefusals = 0
@@ -297,7 +357,8 @@ export class Store {
   }
 
   async saveProfile(patch: { name?: string; email?: string }) {
-    this.profile = await this.authorized((api, t) => api.updateProfile(t, patch))
+    const { name, email } = await this.authorized((api, t) => api.updateProfile(t, patch))
+    this.profile = { name, email }
     this.emit()
   }
 
@@ -321,9 +382,12 @@ export class Store {
     const id = this.hostUserId
     if (!id || !this.client) return
     try {
-      this.profile = await this.authorized((api, t) => api.updateProfile(t, { user_id: id }))
+      const { name, email, restored } = await this.authorized((api, t) => api.updateProfile(t, { user_id: id }))
+      this.profile = { name, email }
       storage.set(this.userKey, id)
       this.emit()
+      // Back on this device with the same account (0.5.0): the old conversations came back.
+      if (restored) await this.refresh()
     } catch (e) {
       if (retry && e instanceof DevReplyError && e.kind === 'conflict') {
         this.logout(true)
@@ -426,6 +490,7 @@ export class Store {
     this.profile = null
     const wasOpen = this.isOpen
     this.isOpen = false
+    this.live.reset()
     this.visibleConversation = null
     this.presentation = {}
     this.emit()
@@ -460,6 +525,38 @@ export class Store {
     this.emit()
   }
 
+  // ---- live updates (0.5.0) ----
+
+  /** A conversation screen came up (or went away): live messages for it go into its thread. */
+  attach(model: ConversationModel): () => void {
+    this.models.add(model)
+    return () => this.models.delete(model)
+  }
+
+  /** A message from the live socket: into its open thread, and the list and unread as a poll would. */
+  liveMessage(conversationId: string, message: Message) {
+    for (const m of this.models) if (m.conversationId === conversationId) m.receive(message)
+    const c = this.conversations.find((x) => x.id === conversationId)
+    // A conversation this list doesn't have yet (started by the team, or on another device): reload it.
+    if (!c) return this.refreshSoon()
+    const at = Date.parse(message.createdAt)
+    const last = Date.parse(c.lastMessageAt)
+    if (at < last) return // older than what the list shows (a backlog message already counted)
+    const onScreen = this.isOpen && this.visibleConversation === conversationId
+    if (onScreen) this.live.read(conversationId)
+    const status = message.systemKey === 'resolved' ? 'resolved' : message.author === 'user' ? 'open' : c.status
+    const unread = onScreen ? 0 : c.unread + (message.author !== 'user' && at > last ? 1 : 0)
+    this.upsert({ ...c, lastText: plainText(message), lastAuthor: message.author, lastMessageAt: message.createdAt, status, unread })
+  }
+
+  private refreshSoon() {
+    if (this.refreshTimer !== null) return
+    this.refreshTimer = window.setTimeout(() => {
+      this.refreshTimer = null
+      void this.refresh()
+    }, 300)
+  }
+
   // ---- the panel ----
 
   /** Opens the messenger (with a category: on a new conversation). False, and nothing shown, when
@@ -473,12 +570,16 @@ export class Store {
     this.emit()
     if (!wasOpen) this.fire('open')
     void this.refresh()
+    // Opening the messenger again also forgets an earlier give-up (503 or 5 failures).
+    if (!wasOpen) this.live.rearm()
+    if (document.visibilityState === 'visible') this.live.start()
     return true
   }
 
   close() {
     const wasOpen = this.isOpen
     this.isOpen = false
+    this.live.stop()
     this.visibleConversation = null
     this.presentation = {}
     this.emit()
@@ -528,11 +629,22 @@ export class Store {
       if (!this.isOpen && document.visibilityState === 'visible' && this.conversations.length > 0) void this.refresh()
     }, 30_000)
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState !== 'visible') return
+      // Live only while someone can see it: a hidden tab closes the socket; back with the messenger open, it reconnects.
+      if (document.visibilityState !== 'visible') return this.live.stop()
+      if (this.isOpen) this.live.start()
       void this.retryDeletions()
       if (!this.isOpen) void this.refresh()
     })
   }
+}
+
+/** A message from the server that is this pending one (same text, same number of attachments, same answer). */
+function sameAs(p: Pending, m: Message): boolean {
+  if (p.failure !== null) return false
+  const text = m.blocks.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('\n')
+  const files = m.blocks.filter((b) => b.type === 'image' || b.type === 'file').length
+  const answerOk = !p.answer || (m.answer?.messageId === p.answer.messageId && m.answer.optionId === p.answer.optionId)
+  return text.trim() === p.text && files === p.attachments.length && answerOk
 }
 
 /** A deletion the server has done, or has nothing left to do for (the install or user is already gone). */
@@ -549,6 +661,8 @@ export interface Pending {
   text: string
   attachments: Outgoing[]
   failure: string | null
+  /** A tapped answer button (0.5.0). */
+  answer?: Answer
 }
 
 /** One conversation. Starts empty for a new one; the first send creates it on the server. */
@@ -556,6 +670,9 @@ export class ConversationModel {
   messages: Message[] = []
   pending: Pending[] = []
   sentCount = 0
+  /** Buttons questions answered from here (0.5.0), until the server's messages say so: the option, or
+   *  null when the server said "already answered" (409) without the answer in the list. */
+  private answered = new Map<string, string | null>()
   private listeners = new Set<Listener>()
 
   constructor(
@@ -578,12 +695,35 @@ export class ConversationModel {
     try {
       const page = await store.authorized((api, t) => api.messages(t, id))
       if (JSON.stringify(page.messages) !== JSON.stringify(this.messages)) this.messages = page.messages
+      const newest = page.messages[page.messages.length - 1]
+      if (newest) store.live.saw(newest.id)
       // Opening it marks the team's replies read: nothing unread in what the user is looking at.
       if (page.conversation) store.upsert({ ...page.conversation, unread: 0 })
       this.emit()
     } catch {
       /* try again on the next tick */
     }
+  }
+
+  /** A message from the live socket (0.5.0): once, in order; the user's own replaces its pending bubble. */
+  receive(m: Message) {
+    if (this.messages.some((x) => x.id === m.id)) return
+    if (m.author === 'user') {
+      const i = this.pending.findIndex((p) => sameAs(p, m))
+      if (i >= 0) this.pending = this.pending.filter((_, j) => j !== i)
+    }
+    this.add(m)
+    this.emit()
+  }
+
+  /** Adds a message the server confirmed, unless it's there already (the socket can beat the POST's answer). */
+  private add(m: Message) {
+    if (this.messages.some((x) => x.id === m.id)) return
+    const last = this.messages[this.messages.length - 1]
+    this.messages = [...this.messages, m]
+    if (last && Date.parse(m.createdAt) < Date.parse(last.createdAt))
+      this.messages.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
+    store.live.saw(m.id)
   }
 
   send(raw: string, attachments: Outgoing[]) {
@@ -594,6 +734,34 @@ export class ConversationModel {
     this.sentCount++
     this.emit()
     this.enqueue(item)
+  }
+
+  /** The user tapped an answer button: a user message with the label as its text (0.5.0). One per question. */
+  answer(messageId: string, option: ButtonOption) {
+    if (this.answerTo(messageId) !== undefined) return
+    const item: Pending = {
+      id: Math.random().toString(36).slice(2),
+      text: option.label,
+      attachments: [],
+      failure: null,
+      answer: { messageId, optionId: option.id },
+    }
+    this.pending = [...this.pending, item]
+    this.sentCount++
+    this.emit()
+    this.enqueue(item)
+  }
+
+  /**
+   * The answer to a buttons message: the chosen option's id, null when it's answered but we don't know
+   * which (a 409 from another device), undefined while open. A later user message that carries the
+   * answer, an answer sent from here, or one on its way.
+   */
+  answerTo(messageId: string): string | null | undefined {
+    const sent = this.messages.find((m) => m.author === 'user' && m.answer?.messageId === messageId)
+    if (sent) return sent.answer!.optionId
+    if (this.answered.has(messageId)) return this.answered.get(messageId)
+    return this.pending.find((p) => p.answer?.messageId === messageId)?.answer?.optionId
   }
 
   retry(item: Pending) {
@@ -615,10 +783,25 @@ export class ConversationModel {
       for (const a of item.attachments) ids.push(await store.authorized((api, t) => api.upload(t, a)))
       if (this.conversationId) {
         const id = this.conversationId
-        const m = await store.authorized((api, t) => api.sendMessage(t, id, item.text, ids))
+        const answer = item.answer
+        let m: Message | null
+        try {
+          m = await store.authorized((api, t) => api.sendMessage(t, id, item.text, ids, answer))
+        } catch (e) {
+          // Already answered (another tab or device): drop this one and show what the server has.
+          if (answer && e instanceof DevReplyError && e.kind === 'conflict') {
+            this.pending = this.pending.filter((p) => p.id !== item.id)
+            await this.load()
+            if (this.answerTo(answer.messageId) === undefined) this.answered.set(answer.messageId, null)
+            this.emit()
+            return
+          }
+          throw e
+        }
+        if (answer) this.answered.set(answer.messageId, answer.optionId)
         store.fire('messageSent', { conversationId: id })
         if (m) {
-          this.messages = [...this.messages, m]
+          this.add(m)
           // The home list shows it straight away, even if the user goes back before the next poll.
           const c = store.conversations.find((x) => x.id === id)
           if (c) store.upsert({ ...c, lastText: plainText(m), lastAuthor: 'user', lastMessageAt: m.createdAt, status: 'open' })
@@ -628,7 +811,8 @@ export class ConversationModel {
         const presentation = store.presentation
         const context = presentation.context ?? {}
         const started = await store.authorized((api, t) => api.start(t, this.category, item.text, ids, context))
-        if (store.presentation === presentation) store.presentation = {}
+        // The draft and context are used up; skipping the name lasts until the messenger closes.
+        if (store.presentation === presentation) store.presentation = presentation.skipName ? { skipName: true } : {}
         if (started.conversation) {
           this.conversationId = started.conversation.id
           store.visibleConversation = started.conversation.id
@@ -636,7 +820,7 @@ export class ConversationModel {
           store.fire('conversationStarted', { conversationId: started.conversation.id, category: this.category })
           store.fire('messageSent', { conversationId: started.conversation.id })
         }
-        if (started.message) this.messages = [...this.messages, started.message]
+        if (started.message) this.add(started.message)
       }
       this.pending = this.pending.filter((p) => p.id !== item.id)
     } catch (e) {

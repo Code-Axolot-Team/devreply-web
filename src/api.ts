@@ -1,3 +1,5 @@
+import { parseMarkdown, plainMarkdown } from './markdown'
+
 // The SDK API (spec 07): the public key registers this browser once; everything after uses the
 // install's own token. Same endpoints and shapes as the iOS and Android SDKs.
 
@@ -61,7 +63,23 @@ export type Block =
   | { type: 'text'; text: string }
   | { type: 'image'; url: string; width?: number; height?: number }
   | { type: 'file'; url: string; name: string; size?: number }
+  /** Team and agent replies (0.5.0): Markdown, rendered formatted; `fallback` is its plain text. */
+  | { type: 'markdown'; text: string; fallback: string }
+  /** A question with answer buttons (0.5.0): `text` is the question in Markdown; 2 to 5 options. */
+  | { type: 'buttons'; text: string; options: ButtonOption[]; fallback: string }
   | { type: 'unsupported'; fallback: string }
+
+/** One answer of a buttons question (0.5.0); ids are the server's. */
+export interface ButtonOption {
+  id: string
+  label: string
+}
+
+/** Which option of which buttons message a user message answered (0.5.0). */
+export interface Answer {
+  messageId: string
+  optionId: string
+}
 
 export interface Message {
   id: string
@@ -72,6 +90,8 @@ export interface Message {
   blocks: Block[]
   /** Team replies (0.4): who wrote it. */
   persona?: Persona
+  /** A user message that answered a buttons question (0.5.0). */
+  answer?: Answer
 }
 
 export interface Profile {
@@ -215,9 +235,34 @@ export function parseBlock(b: Record<string, unknown>): Block {
       return url ? { type: 'image', url, width: num(b.width), height: num(b.height) } : { type: 'unsupported', fallback: 'Photo' }
     case 'file':
       return url ? { type: 'file', url, name: str(b.name) ?? 'File', size: num(b.size) } : { type: 'unsupported', fallback }
+    case 'markdown': {
+      const text = str(b.text)
+      if (!text) return { type: 'unsupported', fallback }
+      return { type: 'markdown', text, fallback: str(b.fallback) ?? plainMarkdown(parseMarkdown(text)) }
+    }
+    case 'buttons': {
+      const text = str(b.text)
+      const options = lossy(b.options, (o) => {
+        const id = str(o.id)
+        const label = str(o.label)?.trim()
+        return id && label ? { id, label } : null
+      }).slice(0, 5)
+      if (!text || options.length < 2) return { type: 'unsupported', fallback }
+      const question = plainMarkdown(parseMarkdown(text))
+      const numbered = options.map((o, i) => `${i + 1}. ${o.label}`).join('\n')
+      return { type: 'buttons', text, options, fallback: str(b.fallback) ?? `${question}\n\n${numbered}` }
+    }
     default:
       return { type: 'unsupported', fallback }
   }
+}
+
+/** `{"message_id", "option_id"}` from the server; null for anything else. */
+export function parseAnswer(v: unknown): Answer | null {
+  const o = obj(v)
+  const messageId = str(o.message_id)
+  const optionId = str(o.option_id)
+  return messageId && optionId ? { messageId, optionId } : null
 }
 
 /** The resolved line as servers before the `key` wrote it. */
@@ -232,6 +277,8 @@ export function parseMessage(o: Record<string, unknown>): Message | null {
   const persona = o.persona && typeof o.persona === 'object' ? parsePersona(obj(o.persona)) : null
   const blocks = Array.isArray(o.blocks) ? o.blocks : []
   const first = obj(blocks[0])
+  // An answer to a buttons question: on the message, or on one of its blocks.
+  const answer = author === 'user' ? (parseAnswer(o.answer) ?? blocks.map((b) => parseAnswer(obj(b).answer)).find((a) => a) ?? null) : null
   const systemKey =
     author === 'system' && (str(first.key) === 'resolved' || str(first.text) === RESOLVED_TEXT) ? 'resolved' : undefined
   return {
@@ -241,6 +288,7 @@ export function parseMessage(o: Record<string, unknown>): Message | null {
     blocks: lossy(o.blocks, parseBlock),
     ...(persona ? { persona } : {}),
     ...(systemKey ? { systemKey } : {}),
+    ...(answer ? { answer } : {}),
   }
 }
 
@@ -270,9 +318,21 @@ export function contextOf(attributes: Record<string, unknown> | null | undefined
   return out
 }
 
+/** A message as plain text, for previews: Markdown shows its fallback, never `**`; a buttons question
+ *  its question only. */
 export function plainText(m: Message): string {
   return m.blocks
-    .map((b) => (b.type === 'text' ? b.text : b.type === 'image' ? 'Photo' : b.type === 'file' ? b.name : b.fallback))
+    .map((b) =>
+      b.type === 'text'
+        ? b.text
+        : b.type === 'image'
+          ? 'Photo'
+          : b.type === 'file'
+            ? b.name
+            : b.type === 'buttons'
+              ? plainMarkdown(parseMarkdown(b.text))
+              : b.fallback,
+    )
     .join('\n')
 }
 
@@ -309,9 +369,11 @@ export class ApiClient {
     throw new DevReplyError('server', message, s)
   }
 
-  async register(publicKey: string, device: Device): Promise<string> {
+  /** `deviceKey` (0.5.0): this browser's secret for the app, kept through logout (spec 03). */
+  async register(publicKey: string, device: Device, deviceKey?: string | null): Promise<string> {
     try {
-      const r = obj(await this.send('POST', 'v1/installs', null, { ...device, public_key: publicKey }))
+      const body = { ...device, public_key: publicKey, ...(deviceKey ? { device_key: deviceKey } : {}) }
+      const r = obj(await this.send('POST', 'v1/installs', null, body))
       const token = str(r.token)
       if (!token) throw new DevReplyError('server')
       return token
@@ -341,6 +403,13 @@ export class ApiClient {
     await this.send('POST', 'v1/deep_link_opened', token)
   }
 
+  /** Live updates (0.5.0): a single-use URL for this install's WebSocket, valid 60 s. 503: live is off. */
+  async liveTicket(token: string): Promise<string> {
+    const url = str(obj(await this.send('POST', 'v1/live', token)).url)
+    if (!url) throw new DevReplyError('server')
+    return url
+  }
+
   async config(token: string, appName: string): Promise<{ config: Config; raw: unknown }> {
     const raw = await this.send('GET', 'v1/messenger/config', token)
     return { config: parseConfig(raw, appName), raw }
@@ -367,8 +436,10 @@ export class ApiClient {
     return { conversation: parseConversation(obj(r.conversation)), message: parseMessage(obj(r.message)) }
   }
 
-  async sendMessage(token: string, conversation: string, text: string, attachmentIds: string[]): Promise<Message | null> {
-    const r = await this.send('POST', `v1/conversations/${conversation}/messages`, token, { text, attachment_ids: attachmentIds })
+  /** `answer` (0.5.0): the tapped option of a buttons question; 409 when it was already answered. */
+  async sendMessage(token: string, conversation: string, text: string, attachmentIds: string[], answer?: Answer): Promise<Message | null> {
+    const body = { text, attachment_ids: attachmentIds, ...(answer ? { answer: { message_id: answer.messageId, option_id: answer.optionId } } : {}) }
+    const r = await this.send('POST', `v1/conversations/${conversation}/messages`, token, body)
     return parseMessage(obj(r))
   }
 
@@ -380,9 +451,10 @@ export class ApiClient {
   async updateProfile(
     token: string,
     patch: { name?: string; email?: string; user_id?: string; attributes?: Record<string, string | number | boolean | null> },
-  ): Promise<Profile> {
+  ): Promise<Profile & { restored: boolean }> {
     const r = obj(await this.send('PATCH', 'v1/me', token, { attributes: {}, ...patch }))
-    return { name: str(r.name), email: str(r.email) }
+    // `restored` (0.5.0): login moved this install back to the same account's user on this device.
+    return { name: str(r.name), email: str(r.email), restored: r.restored === true }
   }
 
   /** A signed upload slot, then the bytes straight to storage. Returns the attachment id. */

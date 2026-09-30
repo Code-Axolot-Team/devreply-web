@@ -14,6 +14,7 @@ const API = '/stub'
 type Json = Record<string, unknown>
 interface Stub {
   enabled: boolean
+  name: string | null
   deleteStatus: number
   installs: number
   started: Json[]
@@ -28,7 +29,7 @@ const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOSt
 
 /** A little DevReply API, same-origin under /stub/v1/…, with the state each test looks at. */
 async function stub(page: Page, init: Partial<Stub> = {}): Promise<Stub> {
-  const s: Stub = { enabled: true, deleteStatus: 204, installs: 0, started: [], sent: [], deletes: [], logouts: [], conversations: [], messages: {}, ...init }
+  const s: Stub = { enabled: true, name: 'Ana', deleteStatus: 204, installs: 0, started: [], sent: [], deletes: [], logouts: [], conversations: [], messages: {}, ...init }
   const json = (route: Route, body: unknown, status = 200) =>
     route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
   await page.route(`**${API}/v1/**`, async (route) => {
@@ -52,7 +53,7 @@ async function stub(page: Page, init: Partial<Stub> = {}): Promise<Stub> {
         enabled: s.enabled,
       })
     if (method === 'GET' && path === '/v1/conversations') return json(route, s.conversations)
-    if ((method === 'GET' || method === 'PATCH') && path === '/v1/me') return json(route, { name: 'Ana', email: 'ana@example.com' })
+    if ((method === 'GET' || method === 'PATCH') && path === '/v1/me') return json(route, { name: s.name, email: 'ana@example.com' })
     if (method === 'DELETE' && path === '/v1/me') {
       s.deletes.push(auth)
       return route.fulfill({ status: s.deleteStatus, body: s.deleteStatus === 204 ? '' : '{}' })
@@ -188,6 +189,29 @@ test('open with a message and attributes: prefilled, not sent; context on the fi
   })
   await page.keyboard.press('Escape')
   expect(await page.evaluate(() => (window as unknown as { hits: number }).hits)).toBe(0)
+})
+
+test('askName: false skips the name form until the messenger closes; otherwise an unnamed user is asked first @smoke', async ({ page }) => {
+  const s = await stub(page, { name: null })
+  await load(page)
+
+  expect(await dr<boolean>(page, 'present', 'billing', { message: 'The purchase failed', askName: false })).toBe(true)
+  const composer = page.getByTestId('devreply.composer')
+  await expect(composer).toHaveValue('The purchase failed')
+  await shot(page, 'web-askname-false.png')
+  await page.getByTestId('devreply.send').click()
+  await expect.poll(() => s.started.length).toBe(1)
+  // Still the composer after the first message, for the follow-ups.
+  await expect(composer).toBeVisible()
+  await composer.fill('Order 42')
+  await page.getByTestId('devreply.send').click()
+  await expect.poll(() => s.sent.length).toBe(1)
+  await page.keyboard.press('Escape')
+
+  // Without it (and after closing), the name comes first as before.
+  expect(await dr<boolean>(page, 'open', 'bug')).toBe(true)
+  await expect(page.getByText('Before we start', { exact: false })).toBeVisible()
+  await expect(composer).toBeHidden()
 })
 
 test('the team switches the chat off: open returns false, the launcher hides, an open chat closes @smoke', async ({ page }) => {
@@ -362,7 +386,7 @@ test('dark theme: only when given, then whenever the browser prefers dark @smoke
   expect(await colour(page, '.kicker.inv', 'background-color')).toBe('rgb(246, 235, 55)') // lemon team tag
   expect(await colour(page, '.kicker.inv', 'color')).toBe('rgb(17, 17, 17)')
   expect(await colour(page, '.conv-top .when', 'color')).toBe('rgb(160, 163, 172)')
-  expect(await colour(page, '.launcher', 'background-color')).toBe('rgb(246, 235, 55)')
+  expect(await colour(page, '.launcher', 'background-color')).toBe('rgb(17, 17, 17)') // the star sits on black (spec 11)
   await page.getByText('Found it: fixed in 3.3.').click()
   await expect(page.locator('.bubble.team')).toBeVisible()
   expect(await colour(page, '.bubble.team', 'background-color')).toBe('rgb(24, 30, 48)')
@@ -430,7 +454,7 @@ test('overlays follow the dark look: launcher and badge, image viewer, attach me
     d.setTheme({ dark: d.darkTheme })
   }))
   expect(await overlays(page, 'web-dark')).toEqual({
-    launcher: 'rgb(246, 235, 55)',
+    launcher: 'rgb(17, 17, 17)',
     badge: 'rgb(246, 235, 55)',
     badgeText: 'rgb(17, 17, 17)',
     overlay: 'rgba(17, 17, 17, 0.94)',
@@ -445,7 +469,7 @@ test('overlays with custom light colours: as 0.4.3', async ({ page }) => {
     ;(window as unknown as { DevReply: { setTheme(t: unknown): void } }).DevReply.setTheme({ light: theme })
   }), { ...CUSTOM, userBubble: '#8E44AD' })
   expect(await overlays(page, 'web-custom')).toEqual({
-    launcher: 'rgb(246, 235, 55)',
+    launcher: 'rgb(17, 17, 17)',
     badge: 'rgb(255, 95, 162)',
     badgeText: 'rgb(17, 17, 17)',
     overlay: 'rgba(17, 17, 17, 0.94)',
@@ -503,4 +527,64 @@ test('light mode is pixel-identical to the previous release', async ({ page }) =
   const after = await screens(page, '/dist/devreply.js', 'web')
   expect(after[0].equals(before[0])).toBe(true)
   expect(after[1].equals(before[1])).toBe(true)
+})
+
+// ---- Right-to-left languages (next release) ----
+
+const thread = (text: { user: string; team: string }) => {
+  const id = '00000000-0000-4000-8000-00000000abcd'
+  const at = (m: number) => ago(m)
+  return {
+    conversations: [{ id, status: 'open', category: 'bug', last_text: text.team, last_author: 'team', unread: 0, last_message_at: at(1) }],
+    messages: {
+      [id]: [
+        { id: 'm1', author: 'user', created_at: at(30), blocks: [{ type: 'text', text: text.user }] },
+        { id: 'm2', author: 'team', created_at: at(1), blocks: [{ type: 'text', text: text.team }], persona: { name: 'Dana', title: 'Support', avatar_url: null } },
+      ],
+    },
+  }
+}
+
+for (const lang of ['he', 'ar'] as const) {
+  const text =
+    lang === 'he'
+      ? { user: 'הייצוא לא עובד מאז העדכון, אפשר עזרה?', team: 'תודה! תיקנו את זה בגרסה 2.4.1 🙌' }
+      : { user: 'التصدير لا يعمل منذ التحديث، هل من مساعدة؟', team: 'شكرًا! أصلحنا ذلك في الإصدار 2.4.1 🙌' }
+
+  test(`${lang}: the chat lays out from the right; arrows flip; the user's bubbles sit on the left @smoke`, async ({ page }) => {
+    await stub(page, thread(text))
+    await load(page, `&locale=${lang}`)
+    expect(await dr<boolean>(page, 'open')).toBe(true)
+    const panel = page.getByTestId('devreply.panel')
+    await expect(panel).toHaveAttribute('dir', 'rtl')
+    await expect(panel.getByText(text.team).first()).toBeVisible()
+    await expect(panel.locator('.conv .when')).not.toContainText('(')
+    await shot(page, `web-${lang}-home.png`)
+
+    await panel.getByText(text.team).first().click()
+    const mine = panel.getByText(text.user, { exact: true })
+    const theirs = panel.getByText(text.team, { exact: true })
+    await expect(theirs).toBeVisible()
+    const [a, b] = [await mine.boundingBox(), await theirs.boundingBox()]
+    // Right to left: the team speaks from the right, the user answers from the left.
+    expect(a!.x).toBeLessThan(b!.x)
+    const back = panel.locator('.flips svg').first()
+    expect(await back.evaluate((e) => getComputedStyle(e).transform)).toBe('matrix(-1, 0, 0, 1, 0, 0)')
+    await shot(page, `web-${lang}-chat.png`)
+  })
+
+  test(`${lang}: the name form and a new conversation, right to left`, async ({ page }) => {
+    await stub(page, { name: null })
+    await load(page, `&locale=${lang}`)
+    expect(await dr<boolean>(page, 'open', 'bug')).toBe(true)
+    await expect(page.getByTestId('devreply.panel')).toHaveAttribute('dir', 'rtl')
+    await shot(page, `web-${lang}-name.png`)
+  })
+}
+
+test('left-to-right languages stay left to right', async ({ page }) => {
+  await stub(page)
+  await load(page, '&locale=de')
+  expect(await dr<boolean>(page, 'open')).toBe(true)
+  await expect(page.getByTestId('devreply.panel')).toHaveAttribute('dir', 'ltr')
 })

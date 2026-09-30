@@ -3,6 +3,7 @@ import { store } from '../store'
 import { Chat } from './Chat'
 import { Home } from './Home'
 import { t } from '../i18n'
+import { RTL } from '../strings'
 import { DarkLook, Icon, useStore } from './parts'
 
 /**
@@ -74,8 +75,9 @@ export function App() {
           <div
             ref={panel}
             class="panel"
+            dir={RTL.includes(s.language) ? 'rtl' : 'ltr'}
             role="dialog"
-            aria-label={`Chat with ${team}`}
+            aria-label={t('launcher.open', { team })}
             data-testid="devreply.panel"
           >
             {route.screen === 'home' ? (

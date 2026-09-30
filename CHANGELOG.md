@@ -3,6 +3,24 @@
 Released versions stay supported: the API only grows, and every released version's requests are replayed
 against the server on every change. The script tag (`/sdk/web/v0/`) always serves the latest 0.x.
 
+## 0.5.0
+
+- Live updates: while the chat is open and the tab visible, new messages arrive over a WebSocket the moment they're
+  sent (the 3 s poll runs only while it's down; reconnects with backoff and catches up on what it missed).
+- Button replies: the team can ask a question with 2 to 5 answer buttons; a tap sends the label as the user's
+  answer, the chosen one stays highlighted, and typing still works.
+- Same device after logout: a random device key, kept in `localStorage` through `logout()`, goes with the
+  install; signing back in with the same account on this browser brings the old conversations back.
+
+- 34 languages (adds Arabic, Catalan, Croatian, Czech, Danish, Finnish, Hebrew, Hindi, Hungarian, Indonesian, Malay,
+  Norwegian, European Portuguese, Romanian, Slovak, Swedish, Thai, Vietnamese, Traditional Chinese). Hebrew and Arabic
+  lay the chat out right to left.
+- `open(…, { askName: false })`: no name form while the messenger is open (e.g. from a failed payment); the chat
+  goes straight to the composer. The email ask after the first message stays.
+- Replies from the team and agents in Markdown (the `markdown` block, `min_sdk` 0.5.0): bold, italic, strike, code,
+  links, headings, lists, code blocks and quotes, as page elements. Older versions show the plain-text fallback.
+- The launcher wears DevReply's new logo: the "Tilt" star on a black circle with a pink shadow.
+
 ## 0.4.4
 
 * `DevReply.open({ category, message, attributes })` (or `open('bug', { message, attributes })`; `present` is
