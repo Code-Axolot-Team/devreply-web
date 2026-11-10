@@ -4,7 +4,7 @@ export const LANGUAGES = ["en", "ar", "ca", "cs", "da", "de", "el", "es", "fi", 
 export type Language = (typeof LANGUAGES)[number]
 /** Right-to-left languages: the chat lays out from the right. */
 export const RTL: readonly Language[] = ["ar", "he"]
-export type StringKey = "greeting" | "intro" | "start_title" | "your_conversations" | "category.bug" | "category.billing" | "category.idea" | "category.question" | "category.other" | "prompt.bug" | "prompt.billing" | "prompt.idea" | "prompt.question" | "prompt.other" | "reply_time.hour" | "reply_time.hours" | "reply_time.day" | "reply_time.2_days" | "reply_time.3_working_days" | "reply_time.week" | "reply_allow.hour" | "reply_allow.hours" | "reply_allow.day" | "reply_allow.2_days" | "reply_allow.3_working_days" | "reply_allow.week" | "notice.title" | "notice.email" | "notice.here" | "name.kicker" | "name.text" | "name.placeholder" | "email.optional" | "name.start" | "saving" | "save" | "error.save" | "email_ask.title" | "email_ask.text" | "email_ask.placeholder" | "no_thanks" | "composer.placeholder" | "composer.label" | "send" | "attach" | "remove_attachment" | "sending" | "uploading" | "failed.attachments" | "failed.offline" | "failed.reason" | "failed.generic" | "too_big" | "too_many" | "unreadable_file" | "photo" | "open_photo" | "close_photo" | "file" | "file_named" | "unsupported" | "back" | "close" | "chat" | "you" | "team" | "resolved" | "system.resolved" | "error.offline" | "error.key" | "error.generic" | "try_again" | "powered" | "launcher.open" | "launcher.close" | "launcher.one" | "launcher.many" | "bubble.open" | "banner.new_reply" | "banner.opens" | "push.title" | "push.text" | "push.turn_on" | "push.not_now" | "push.off_title" | "push.off_text" | "push.open_settings" | "push.channel" | "a11y.unread"
+export type StringKey = "greeting" | "intro" | "start_title" | "your_conversations" | "category.bug" | "category.billing" | "category.idea" | "category.question" | "category.other" | "prompt.bug" | "prompt.billing" | "prompt.idea" | "prompt.question" | "prompt.other" | "reply_time.hour" | "reply_time.hours" | "reply_time.day" | "reply_time.2_days" | "reply_time.3_working_days" | "reply_time.week" | "reply_allow.hour" | "reply_allow.hours" | "reply_allow.day" | "reply_allow.2_days" | "reply_allow.3_working_days" | "reply_allow.week" | "notice.title" | "notice.email" | "notice.here" | "name.kicker" | "name.text" | "name.placeholder" | "email.optional" | "name.start" | "saving" | "save" | "error.save" | "email_ask.title" | "email_ask.text" | "email_ask.placeholder" | "no_thanks" | "composer.placeholder" | "composer.label" | "send" | "attach" | "remove_attachment" | "sending" | "uploading" | "failed.attachments" | "failed.offline" | "failed.reason" | "failed.generic" | "too_big" | "too_many" | "unreadable_file" | "photo" | "open_photo" | "close_photo" | "file" | "file_named" | "unsupported" | "back" | "close" | "chat" | "you" | "team" | "resolved" | "system.resolved" | "error.offline" | "error.key" | "error.generic" | "try_again" | "powered" | "launcher.open" | "launcher.close" | "launcher.one" | "launcher.many" | "bubble.open" | "banner.new_reply" | "banner.opens" | "push.title" | "push.text" | "push.turn_on" | "push.not_now" | "push.off_title" | "push.off_text" | "push.open_settings" | "push.channel" | "a11y.unread" | "home.new_reply" | "home.new_conversation"
 
 export const STRINGS: Record<Language, Record<StringKey, string>> = {
   "en": {
@@ -96,7 +96,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Turn them on in Settings so you see when {team} answers.",
     "push.open_settings": "Open Settings",
     "push.channel": "Replies",
-    "a11y.unread": "{count} unread"
+    "a11y.unread": "{count} unread",
+    "home.new_reply": "New reply from {team}",
+    "home.new_conversation": "Start a new conversation"
   },
   "ar": {
     "greeting": "مرحبًا 👋",
@@ -187,7 +189,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "فعّلها من الإعدادات لتعرف متى يرد {team}.",
     "push.open_settings": "فتح الإعدادات",
     "push.channel": "الردود",
-    "a11y.unread": "غير مقروءة: {count}"
+    "a11y.unread": "غير مقروءة: {count}",
+    "home.new_reply": "رد جديد من {team}",
+    "home.new_conversation": "ابدأ محادثة جديدة"
   },
   "ca": {
     "greeting": "Hola 👋",
@@ -278,7 +282,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Activa-les a Configuració per saber quan respon {team}.",
     "push.open_settings": "Obre Configuració",
     "push.channel": "Respostes",
-    "a11y.unread": "Sense llegir: {count}"
+    "a11y.unread": "Sense llegir: {count}",
+    "home.new_reply": "Nova resposta de {team}",
+    "home.new_conversation": "Comença una conversa nova"
   },
   "cs": {
     "greeting": "Ahoj 👋",
@@ -369,7 +375,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Zapni je v Nastavení, ať víš, až {team} odpoví.",
     "push.open_settings": "Otevřít Nastavení",
     "push.channel": "Odpovědi",
-    "a11y.unread": "Nepřečtené: {count}"
+    "a11y.unread": "Nepřečtené: {count}",
+    "home.new_reply": "Nová odpověď od {team}",
+    "home.new_conversation": "Začít novou konverzaci"
   },
   "da": {
     "greeting": "Hej 👋",
@@ -460,7 +468,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Slå dem til i Indstillinger, så du kan se, når {team} svarer.",
     "push.open_settings": "Åbn Indstillinger",
     "push.channel": "Svar",
-    "a11y.unread": "Ulæste: {count}"
+    "a11y.unread": "Ulæste: {count}",
+    "home.new_reply": "Nyt svar fra {team}",
+    "home.new_conversation": "Start en ny samtale"
   },
   "de": {
     "greeting": "Hallo 👋",
@@ -551,7 +561,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Schalte sie in den Einstellungen ein, damit du siehst, wenn {team} antwortet.",
     "push.open_settings": "Einstellungen öffnen",
     "push.channel": "Antworten",
-    "a11y.unread": "{count} ungelesen"
+    "a11y.unread": "{count} ungelesen",
+    "home.new_reply": "Neue Antwort von {team}",
+    "home.new_conversation": "Neue Unterhaltung beginnen"
   },
   "el": {
     "greeting": "Γεια σου 👋",
@@ -642,7 +654,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Ενεργοποίησέ τες στις Ρυθμίσεις για να βλέπεις πότε απαντά {team}.",
     "push.open_settings": "Άνοιγμα Ρυθμίσεων",
     "push.channel": "Απαντήσεις",
-    "a11y.unread": "Μη αναγνωσμένα: {count}"
+    "a11y.unread": "Μη αναγνωσμένα: {count}",
+    "home.new_reply": "Νέα απάντηση από {team}",
+    "home.new_conversation": "Ξεκινήστε νέα συνομιλία"
   },
   "es": {
     "greeting": "¡Hola! 👋",
@@ -733,7 +747,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Actívalas en Ajustes para saber cuándo responde {team}.",
     "push.open_settings": "Abrir Ajustes",
     "push.channel": "Respuestas",
-    "a11y.unread": "{count} sin leer"
+    "a11y.unread": "{count} sin leer",
+    "home.new_reply": "Nueva respuesta de {team}",
+    "home.new_conversation": "Empezar una conversación nueva"
   },
   "fi": {
     "greeting": "Hei 👋",
@@ -824,7 +840,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Laita ne päälle Asetuksissa, niin näet, kun {team} vastaa.",
     "push.open_settings": "Avaa Asetukset",
     "push.channel": "Vastaukset",
-    "a11y.unread": "Lukemattomia: {count}"
+    "a11y.unread": "Lukemattomia: {count}",
+    "home.new_reply": "Uusi vastaus: {team}",
+    "home.new_conversation": "Aloita uusi keskustelu"
   },
   "fr": {
     "greeting": "Bonjour 👋",
@@ -915,7 +933,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Activez-les dans Réglages pour voir quand {team} répond.",
     "push.open_settings": "Ouvrir Réglages",
     "push.channel": "Réponses",
-    "a11y.unread": "{count} non lus"
+    "a11y.unread": "{count} non lus",
+    "home.new_reply": "Nouvelle réponse de {team}",
+    "home.new_conversation": "Démarrer une nouvelle conversation"
   },
   "he": {
     "greeting": "שלום 👋",
@@ -1006,7 +1026,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "הפעילו אותן בהגדרות כדי לדעת מתי {team} עונים.",
     "push.open_settings": "פתיחת ההגדרות",
     "push.channel": "תשובות",
-    "a11y.unread": "לא נקראו: {count}"
+    "a11y.unread": "לא נקראו: {count}",
+    "home.new_reply": "תשובה חדשה מ-{team}",
+    "home.new_conversation": "התחלת שיחה חדשה"
   },
   "hi": {
     "greeting": "नमस्ते 👋",
@@ -1097,7 +1119,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "सेटिंग्स में इन्हें चालू करें, ताकि {team} के जवाब देने पर आपको दिखे।",
     "push.open_settings": "सेटिंग्स खोलें",
     "push.channel": "जवाब",
-    "a11y.unread": "अपठित: {count}"
+    "a11y.unread": "अपठित: {count}",
+    "home.new_reply": "{team} का नया जवाब",
+    "home.new_conversation": "नई बातचीत शुरू करें"
   },
   "hr": {
     "greeting": "Bok 👋",
@@ -1188,7 +1212,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Uključi ih u Postavkama da vidiš kad {team} odgovori.",
     "push.open_settings": "Otvori Postavke",
     "push.channel": "Odgovori",
-    "a11y.unread": "Nepročitano: {count}"
+    "a11y.unread": "Nepročitano: {count}",
+    "home.new_reply": "Novi odgovor od {team}",
+    "home.new_conversation": "Započni novi razgovor"
   },
   "hu": {
     "greeting": "Szia 👋",
@@ -1279,7 +1305,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Kapcsold be őket a Beállításokban, hogy lásd, amikor {team} válaszol.",
     "push.open_settings": "Beállítások megnyitása",
     "push.channel": "Válaszok",
-    "a11y.unread": "Olvasatlan: {count}"
+    "a11y.unread": "Olvasatlan: {count}",
+    "home.new_reply": "Új válasz: {team}",
+    "home.new_conversation": "Új beszélgetés indítása"
   },
   "id": {
     "greeting": "Halo 👋",
@@ -1370,7 +1398,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Aktifkan di Pengaturan agar kamu tahu saat {team} membalas.",
     "push.open_settings": "Buka Pengaturan",
     "push.channel": "Balasan",
-    "a11y.unread": "Belum dibaca: {count}"
+    "a11y.unread": "Belum dibaca: {count}",
+    "home.new_reply": "Balasan baru dari {team}",
+    "home.new_conversation": "Mulai percakapan baru"
   },
   "it": {
     "greeting": "Ciao 👋",
@@ -1461,7 +1491,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Attivale nelle Impostazioni per sapere quando {team} risponde.",
     "push.open_settings": "Apri Impostazioni",
     "push.channel": "Risposte",
-    "a11y.unread": "{count} da leggere"
+    "a11y.unread": "{count} da leggere",
+    "home.new_reply": "Nuova risposta da {team}",
+    "home.new_conversation": "Inizia una nuova conversazione"
   },
   "ja": {
     "greeting": "こんにちは 👋",
@@ -1552,7 +1584,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "{team} の返信が分かるよう、設定で通知をオンにしてください。",
     "push.open_settings": "設定を開く",
     "push.channel": "返信",
-    "a11y.unread": "未読 {count} 件"
+    "a11y.unread": "未読 {count} 件",
+    "home.new_reply": "{team}から新しい返信",
+    "home.new_conversation": "新しい会話を始める"
   },
   "ko": {
     "greeting": "안녕하세요 👋",
@@ -1643,7 +1677,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "{team}의 답장을 확인하려면 설정에서 알림을 켜세요.",
     "push.open_settings": "설정 열기",
     "push.channel": "답장",
-    "a11y.unread": "읽지 않음 {count}개"
+    "a11y.unread": "읽지 않음 {count}개",
+    "home.new_reply": "{team}의 새 답장",
+    "home.new_conversation": "새 대화 시작"
   },
   "ms": {
     "greeting": "Hai 👋",
@@ -1734,7 +1770,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Hidupkan dalam Tetapan supaya anda tahu apabila {team} membalas.",
     "push.open_settings": "Buka Tetapan",
     "push.channel": "Balasan",
-    "a11y.unread": "Belum dibaca: {count}"
+    "a11y.unread": "Belum dibaca: {count}",
+    "home.new_reply": "Balasan baharu daripada {team}",
+    "home.new_conversation": "Mulakan perbualan baharu"
   },
   "nb": {
     "greeting": "Hei 👋",
@@ -1825,7 +1863,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Slå dem på i Innstillinger, så ser du når {team} svarer.",
     "push.open_settings": "Åpne Innstillinger",
     "push.channel": "Svar",
-    "a11y.unread": "Uleste: {count}"
+    "a11y.unread": "Uleste: {count}",
+    "home.new_reply": "Nytt svar fra {team}",
+    "home.new_conversation": "Start en ny samtale"
   },
   "nl": {
     "greeting": "Hoi 👋",
@@ -1916,7 +1956,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Zet ze aan in Instellingen, zodat je ziet wanneer {team} antwoordt.",
     "push.open_settings": "Instellingen openen",
     "push.channel": "Antwoorden",
-    "a11y.unread": "{count} ongelezen"
+    "a11y.unread": "{count} ongelezen",
+    "home.new_reply": "Nieuw antwoord van {team}",
+    "home.new_conversation": "Nieuw gesprek beginnen"
   },
   "pl": {
     "greeting": "Cześć 👋",
@@ -2007,7 +2049,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Włącz je w Ustawieniach, aby wiedzieć, kiedy odpowie {team}.",
     "push.open_settings": "Otwórz Ustawienia",
     "push.channel": "Odpowiedzi",
-    "a11y.unread": "Nieprzeczytane: {count}"
+    "a11y.unread": "Nieprzeczytane: {count}",
+    "home.new_reply": "Nowa odpowiedź od {team}",
+    "home.new_conversation": "Rozpocznij nową rozmowę"
   },
   "pt-BR": {
     "greeting": "Oi! 👋",
@@ -2098,7 +2142,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Ative-as nos Ajustes para saber quando {team} responder.",
     "push.open_settings": "Abrir Ajustes",
     "push.channel": "Respostas",
-    "a11y.unread": "{count} não lidas"
+    "a11y.unread": "{count} não lidas",
+    "home.new_reply": "Nova resposta de {team}",
+    "home.new_conversation": "Começar uma nova conversa"
   },
   "pt-PT": {
     "greeting": "Olá 👋",
@@ -2189,7 +2235,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Ativa-as nas Definições para veres quando {team} responder.",
     "push.open_settings": "Abrir Definições",
     "push.channel": "Respostas",
-    "a11y.unread": "Por ler: {count}"
+    "a11y.unread": "Por ler: {count}",
+    "home.new_reply": "Nova resposta de {team}",
+    "home.new_conversation": "Iniciar uma nova conversa"
   },
   "ro": {
     "greeting": "Salut 👋",
@@ -2280,7 +2328,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Activează-le din Setări ca să vezi când răspunde {team}.",
     "push.open_settings": "Deschide Setările",
     "push.channel": "Răspunsuri",
-    "a11y.unread": "Necitite: {count}"
+    "a11y.unread": "Necitite: {count}",
+    "home.new_reply": "Răspuns nou de la {team}",
+    "home.new_conversation": "Începe o conversație nouă"
   },
   "ru": {
     "greeting": "Привет 👋",
@@ -2371,7 +2421,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Включите их в Настройках, чтобы видеть, когда отвечает {team}.",
     "push.open_settings": "Открыть Настройки",
     "push.channel": "Ответы",
-    "a11y.unread": "Непрочитанные: {count}"
+    "a11y.unread": "Непрочитанные: {count}",
+    "home.new_reply": "Новый ответ от {team}",
+    "home.new_conversation": "Начать новый разговор"
   },
   "sk": {
     "greeting": "Ahoj 👋",
@@ -2462,7 +2514,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Zapni ich v Nastaveniach a uvidíš, keď {team} odpovie.",
     "push.open_settings": "Otvoriť Nastavenia",
     "push.channel": "Odpovede",
-    "a11y.unread": "Neprečítané: {count}"
+    "a11y.unread": "Neprečítané: {count}",
+    "home.new_reply": "Nová odpoveď od {team}",
+    "home.new_conversation": "Začať nový rozhovor"
   },
   "sv": {
     "greeting": "Hej 👋",
@@ -2553,7 +2607,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Slå på dem i Inställningar så ser du när {team} svarar.",
     "push.open_settings": "Öppna Inställningar",
     "push.channel": "Svar",
-    "a11y.unread": "Olästa: {count}"
+    "a11y.unread": "Olästa: {count}",
+    "home.new_reply": "Nytt svar från {team}",
+    "home.new_conversation": "Starta en ny konversation"
   },
   "th": {
     "greeting": "สวัสดี 👋",
@@ -2644,7 +2700,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "เปิดการแจ้งเตือนในการตั้งค่า เพื่อให้รู้เมื่อ {team} ตอบกลับ",
     "push.open_settings": "เปิดการตั้งค่า",
     "push.channel": "คำตอบ",
-    "a11y.unread": "ยังไม่ได้อ่าน: {count}"
+    "a11y.unread": "ยังไม่ได้อ่าน: {count}",
+    "home.new_reply": "คำตอบใหม่จาก {team}",
+    "home.new_conversation": "เริ่มการสนทนาใหม่"
   },
   "tr": {
     "greeting": "Merhaba 👋",
@@ -2735,7 +2793,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "{team} yanıt verdiğinde görmek için Ayarlar'dan aç.",
     "push.open_settings": "Ayarlar'ı aç",
     "push.channel": "Yanıtlar",
-    "a11y.unread": "{count} okunmamış"
+    "a11y.unread": "{count} okunmamış",
+    "home.new_reply": "{team} ekibinden yeni yanıt",
+    "home.new_conversation": "Yeni bir sohbet başlat"
   },
   "uk": {
     "greeting": "Привіт 👋",
@@ -2826,7 +2886,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Увімкніть їх у Параметрах, щоб бачити, коли відповідає {team}.",
     "push.open_settings": "Відкрити Параметри",
     "push.channel": "Відповіді",
-    "a11y.unread": "Непрочитані: {count}"
+    "a11y.unread": "Непрочитані: {count}",
+    "home.new_reply": "Нова відповідь від {team}",
+    "home.new_conversation": "Почати нову розмову"
   },
   "vi": {
     "greeting": "Xin chào 👋",
@@ -2917,7 +2979,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "Bật thông báo trong Cài đặt để biết khi {team} trả lời.",
     "push.open_settings": "Mở Cài đặt",
     "push.channel": "Phản hồi",
-    "a11y.unread": "Chưa đọc: {count}"
+    "a11y.unread": "Chưa đọc: {count}",
+    "home.new_reply": "Trả lời mới từ {team}",
+    "home.new_conversation": "Bắt đầu cuộc trò chuyện mới"
   },
   "zh-Hans": {
     "greeting": "你好 👋",
@@ -3008,7 +3072,9 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "在设置中打开通知，就能在 {team} 回复时看到。",
     "push.open_settings": "打开设置",
     "push.channel": "回复",
-    "a11y.unread": "{count} 条未读"
+    "a11y.unread": "{count} 条未读",
+    "home.new_reply": "{team} 的新回复",
+    "home.new_conversation": "开始新的对话"
   },
   "zh-Hant": {
     "greeting": "你好 👋",
@@ -3099,6 +3165,8 @@ export const STRINGS: Record<Language, Record<StringKey, string>> = {
     "push.off_text": "請到「設定」開啟通知，{team} 回覆時你才會知道。",
     "push.open_settings": "開啟設定",
     "push.channel": "回覆",
-    "a11y.unread": "未讀：{count}"
+    "a11y.unread": "未讀：{count}",
+    "home.new_reply": "{team} 的新回覆",
+    "home.new_conversation": "開始新的對話"
   }
 }

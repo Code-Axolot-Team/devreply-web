@@ -80,6 +80,8 @@ test('first message: notice with the reply time, optional email, Enter sends @sm
   await page.getByRole('button', { name: 'Back' }).click()
   await expect(page.getByText('Second line one')).toBeVisible()
   await page.getByTestId('devreply.start.question').click()
+  // 0.5.1: the topic continues the open question; a new one is one tap away.
+  await page.getByTestId('devreply.new_conversation').click()
   await page.getByTestId('devreply.composer').fill(`Another question ${nonce}`)
   await page.getByTestId('devreply.send').click()
   await expect(page.getByTestId('devreply.notice')).toBeVisible({ timeout: 10_000 })

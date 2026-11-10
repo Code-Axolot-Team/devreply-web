@@ -260,6 +260,10 @@ svg{display:block;width:100%;height:100%}
 .conv.closed{opacity:.7}
 .count{min-width:22px;height:22px;padding:0 5px;border-radius:11px;color:var(--dr-on-lemon);background:var(--dr-badge);border:calc(2px * var(--dr-ow)) solid var(--dr-outline);
   font-size:12px;font-weight:700;text-align:center;line-height:18px}
+.new-reply{display:flex;gap:12px;align-items:center;width:100%;padding:12px 14px;color:var(--dr-on-card);background:var(--dr-card);border:calc(3px * var(--dr-ow)) solid var(--dr-outline);box-shadow:5px 5px 0 var(--dr-shadow)}
+.new-reply:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--dr-shadow)}
+.new-reply .when{color:inherit;opacity:.75}
+.new-reply-text{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-top:6px;font-size:15px;font-weight:500}
 .powered{font-size:12px;color:var(--dr-muted);text-align:center;padding:6px 0 4px}
 .powered a{color:inherit}
 
@@ -343,6 +347,16 @@ svg{display:block;width:100%;height:100%}
 .card-row{display:flex;gap:10px;align-items:center}
 .card-title{font-weight:700;font-size:15px;flex:1}
 .link{font-weight:700;font-size:14px;color:var(--dr-muted)}
+.restart{display:flex;justify-content:center;padding:8px 14px;background:var(--dr-bg);border-top:calc(3px * var(--dr-ow)) solid var(--dr-outline)}
+.restart .link{text-decoration:underline;text-underline-offset:3px}
+.wait{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;min-height:72px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+  background:var(--dr-surface);border-top:calc(3px * var(--dr-ow)) solid var(--dr-outline);text-align:center}
+.wait .link{text-decoration:underline;text-underline-offset:3px}
+.wait-dots{display:flex;gap:6px}
+.wait-dots i{width:9px;height:9px;background:var(--dr-ink);animation:dr-blink 1s infinite}
+.wait-dots i:nth-child(2){animation-delay:.15s}
+.wait-dots i:nth-child(3){animation-delay:.3s}
+@keyframes dr-blink{0%,100%{opacity:.2}50%{opacity:1}}
 .composer{background:var(--dr-surface);border-top:calc(3px * var(--dr-ow)) solid var(--dr-outline);padding:12px 14px calc(12px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px}
 .composer-row{display:flex;gap:10px;align-items:flex-end}
 .composer textarea{flex:1;min-height:46px;max-height:140px;padding:11px 14px;border:calc(3px * var(--dr-ow)) solid var(--dr-outline);border-radius:0;resize:none;

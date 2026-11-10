@@ -25,7 +25,9 @@ import { Live } from './live'
 export type Attribute = string | number | boolean | null
 export type LauncherMode = 'always' | 'unread' | 'none'
 
-export type Route = { screen: 'home' } | { screen: 'chat'; conversationId: string | null; category: Category | null }
+/** `continued` (0.5.1): a start topic opened the user's open conversation in it, so the chat offers
+ *  "Start a new conversation". */
+export type Route = { screen: 'home' } | { screen: 'chat'; conversationId: string | null; category: Category | null; continued?: boolean }
 
 type Listener = () => void
 
@@ -126,6 +128,8 @@ export class Store {
   config: Config = placeholderConfig(typeof document === 'undefined' ? '' : document.title || location.hostname)
   conversations: Conversation[] = []
   profile: Profile | null = null
+  /** Why the profile hasn't arrived (0.5.1): the chat shows it with Try again while it keeps retrying. */
+  profileError: DevReplyError | null = null
   lastError: DevReplyError | null = null
   isOpen = false
   route: Route[] = [{ screen: 'home' }]
@@ -152,6 +156,9 @@ export class Store {
   /** Conversations on screen (0.5.0): live messages go straight into their threads. */
   private models = new Set<ConversationModel>()
   private refreshTimer: number | null = null
+  private profileLoading = false
+  private profileRetry: number | null = null
+  private profileFailures = 0
 
   /** Live updates (0.5.0, spec 05): a WebSocket while the messenger is open and the tab visible. */
   readonly live = new Live({
@@ -331,29 +338,60 @@ export class Store {
 
   async refresh() {
     if (!this.client) return
-    try {
-      const [config, list, me] = await Promise.all([
-        this.authorized((api, t) => api.config(t, this.config.appName)),
-        this.authorized((api, t) => api.conversations(t)),
-        this.authorized((api, t) => api.profile(t)),
-      ])
-      this.config = config.config
-      storage.set(this.configKey, JSON.stringify(config.raw))
-      this.conversations = list
-      this.profile = me
-      this.lastError = null
-    } catch (e) {
-      this.lastError = e instanceof DevReplyError ? e : new DevReplyError('network')
+    // Each part on its own (0.5.1): a failing profile never keeps the conversations off home.
+    const [config, list, me] = await Promise.all([
+      settle(this.authorized((api, t) => api.config(t, this.config.appName))),
+      settle(this.authorized((api, t) => api.conversations(t))),
+      settle(this.authorized((api, t) => api.profile(t))),
+    ])
+    if (config.ok) {
+      this.config = config.value.config
+      storage.set(this.configKey, JSON.stringify(config.value.raw))
     }
+    if (list.ok) this.conversations = list.value
+    if (me.ok) {
+      this.profile = me.value
+      this.profileError = null
+    }
+    const failed = [config, list, me].find((r) => !r.ok)
+    this.lastError = failed && !failed.ok ? (failed.error instanceof DevReplyError ? failed.error : new DevReplyError('network')) : null
     this.emit()
     // The team switched the chat off while it was open.
     if (this.isOpen && !this.config.enabled) this.close()
   }
 
-  async loadProfileIfNeeded() {
-    if (this.profile) return
-    this.profile = await this.authorized((api, t) => api.profile(t)).catch(() => null)
+  /**
+   * The profile decides between the name form and the composer, so the chat can't show either without
+   * it (0.5.1: never an empty bottom). Retries while the messenger is open, 2 s, 4 s, 8 s… up to 30 s;
+   * after a failure the chat shows why, with Try again (`manual`: at once, loading again).
+   */
+  async loadProfileIfNeeded(manual = false) {
+    if (this.profile || this.profileLoading) return
+    this.clearProfileRetry()
+    if (manual) this.profileError = null
+    this.profileLoading = true
     this.emit()
+    try {
+      const me = await this.authorized((api, t) => api.profile(t))
+      if (!this.profile) this.profile = me
+      this.profileError = null
+      this.profileFailures = 0
+    } catch (e) {
+      // A refresh may have brought it meanwhile.
+      if (!this.profile) {
+        this.profileError = e instanceof DevReplyError ? e : new DevReplyError('network')
+        const wait = Math.min(30_000, 2_000 * 2 ** this.profileFailures++)
+        if (this.isOpen) this.profileRetry = window.setTimeout(() => void this.loadProfileIfNeeded(), wait)
+      }
+    } finally {
+      this.profileLoading = false
+    }
+    this.emit()
+  }
+
+  private clearProfileRetry() {
+    if (this.profileRetry !== null) window.clearTimeout(this.profileRetry)
+    this.profileRetry = null
   }
 
   async saveProfile(patch: { name?: string; email?: string }) {
@@ -488,6 +526,8 @@ export class Store {
     this.pendingAttributes = {}
     this.conversations = []
     this.profile = null
+    this.profileError = null
+    this.clearProfileRetry()
     const wasOpen = this.isOpen
     this.isOpen = false
     this.live.reset()
@@ -580,6 +620,8 @@ export class Store {
     const wasOpen = this.isOpen
     this.isOpen = false
     this.live.stop()
+    this.clearProfileRetry()
+    this.profileFailures = 0
     this.visibleConversation = null
     this.presentation = {}
     this.emit()
@@ -617,6 +659,12 @@ export class Store {
     this.emit()
   }
 
+  /** Swaps the screen on top (0.5.1: "Start a new conversation" from a continued one); Back still goes home. */
+  replace(route: Route) {
+    this.route = [...this.route.slice(0, -1), route]
+    this.emit()
+  }
+
   back() {
     if (this.route.length > 1) this.route = this.route.slice(0, -1)
     this.emit()
@@ -636,6 +684,14 @@ export class Store {
       if (!this.isOpen) void this.refresh()
     })
   }
+}
+
+/** `Promise.allSettled` for the browsers the SDK still supports (es2019). */
+function settle<T>(p: Promise<T>): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> {
+  return p.then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  )
 }
 
 /** A message from the server that is this pending one (same text, same number of attachments, same answer). */

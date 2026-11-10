@@ -3,6 +3,19 @@
 Released versions stay supported: the API only grows, and every released version's requests are replayed
 against the server on every change. The script tag (`/sdk/web/v0/`) always serves the latest 0.x.
 
+## 0.5.1
+
+- An unread reply comes first: with a team reply waiting, home shows it on top ("New reply from {team}" and its
+  first words); a click opens that conversation.
+- A start topic with an open conversation in it opens that conversation, with "Start a new conversation" one click
+  away. `open({ category, message })`, and a topic tapped while an `open({ message })` draft waits, still start a
+  new one.
+- The message box always appears: until the profile (`GET /v1/me`) arrives the chat shows loading, then why it
+  can't connect with Try again, and keeps retrying (2 s, 4 s… up to 30 s) while open. A failing profile no longer
+  keeps the conversations off home.
+- Network timeouts: every request gives up after 20 s (uploads after 60 s) and counts as offline, like the iOS and
+  Android SDKs (`AbortSignal.timeout`, with a timer on older browsers).
+
 ## 0.5.0
 
 - Live updates: while the chat is open and the tab visible, new messages arrive over a WebSocket the moment they're

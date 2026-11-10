@@ -211,6 +211,33 @@ export function parseConversation(o: Record<string, unknown>): Conversation | nu
   }
 }
 
+/** Still open for the user: not resolved (`closed`, or `resolved` from a live message). */
+export const isOpenConversation = (c: Conversation): boolean => c.status !== 'closed' && c.status !== 'resolved'
+
+/** What a start topic opens (0.5.1): the newest open conversation in that category, so the user sees
+ *  the answer instead of writing twice; null starts a new one. */
+export function openConversationIn(conversations: readonly Conversation[], cat: Category): Conversation | null {
+  return newest(conversations.filter((c) => c.category === cat && isOpenConversation(c)))
+}
+
+/** The conversation home puts first (0.5.1): the newest with an unread reply from the team. */
+export function unreadReply(conversations: readonly Conversation[]): Conversation | null {
+  return newest(conversations.filter((c) => c.unread > 0 && c.lastAuthor !== 'user' && c.lastAuthor !== 'system'))
+}
+
+const newest = (list: readonly Conversation[]): Conversation | null =>
+  list.reduce<Conversation | null>((best, c) => (!best || c.lastMessageAt > best.lastMessageAt ? c : best), null)
+
+/** The first words of a text for a one-line preview: spaces folded, cut at a word near `max` characters. */
+export function firstWords(text: string, max = 90): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  const chars = Array.from(flat)
+  if (chars.length <= max) return flat
+  const cut = chars.slice(0, max).join('')
+  const space = cut.lastIndexOf(' ')
+  return `${(space > max / 2 ? cut.slice(0, space) : cut).trimEnd()}…`
+}
+
 /** Is version `a` older than `b`? ("0.3.0" < "0.10.0") */
 export function olderThan(a: string, b: string): boolean {
   const pa = a.split('.').map((x) => parseInt(x, 10) || 0)
@@ -338,26 +365,60 @@ export function plainText(m: Message): string {
 
 // ---- HTTP ----
 
+/** How long a request may take (0.5.1), like the iOS and Android SDKs; uploads get longer. */
+export const TIMEOUTS = { request: 20_000, upload: 60_000 }
+
+/**
+ * A signal that aborts after `ms` (0.5.1). `AbortSignal.timeout` where the browser has it; else an
+ * AbortController and a timer (Safari before 16, older Chrome). `done` stops the timer once the
+ * answer is read.
+ */
+export function timeoutSignal(ms: number): { signal: AbortSignal | undefined; done: () => void } {
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') return { signal: AbortSignal.timeout(ms), done: () => {} }
+  if (typeof AbortController === 'undefined') return { signal: undefined, done: () => {} }
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), ms)
+  return { signal: controller.signal, done: () => clearTimeout(timer) }
+}
+
+/** `fetch` that gives up after `ms`: a hang, like no connection, is a `network` error (0.5.1). The
+ *  body is read under the same limit; a server that stalls halfway counts too. */
+async function fetchWithin(ms: number, url: string, init: RequestInit): Promise<{ res: Response; json: unknown }> {
+  const { signal, done } = timeoutSignal(ms)
+  try {
+    const res = await fetch(url, { ...init, ...(signal ? { signal } : {}) })
+    let json: unknown = {}
+    try {
+      json = await res.json()
+    } catch (e) {
+      if (signal?.aborted) throw e
+    }
+    return { res, json }
+  } catch {
+    throw new DevReplyError('network')
+  } finally {
+    done()
+  }
+}
+
 export class ApiClient {
-  constructor(readonly baseUrl: string) {}
+  /** `timeouts`: for tests only. */
+  constructor(
+    readonly baseUrl: string,
+    private readonly timeouts: { request: number; upload: number } = TIMEOUTS,
+  ) {}
 
   private async send(method: string, path: string, token: string | null, body?: unknown): Promise<unknown> {
-    let res: Response
-    try {
-      res = await fetch(`${this.baseUrl.replace(/\/$/, '')}/${path}`, {
-        method,
-        headers: {
-          Accept: 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-        },
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-        credentials: 'omit',
-      })
-    } catch {
-      throw new DevReplyError('network')
-    }
-    const json = await res.json().catch(() => ({}))
+    const { res, json } = await fetchWithin(this.timeouts.request, `${this.baseUrl.replace(/\/$/, '')}/${path}`, {
+      method,
+      headers: {
+        Accept: 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      credentials: 'omit',
+    })
     if (res.ok) return json
     const message = str(obj(obj(json).error).message) ?? `HTTP ${res.status}`
     const s = res.status
@@ -474,12 +535,7 @@ export class ApiClient {
     if (!url || !id) throw new DevReplyError('server')
     const headers: Record<string, string> = {}
     for (const [k, v] of Object.entries(obj(slot.upload_headers))) if (typeof v === 'string') headers[k] = v
-    let res: Response
-    try {
-      res = await fetch(url, { method: 'PUT', headers, body: a.data, credentials: 'omit' })
-    } catch {
-      throw new DevReplyError('network')
-    }
+    const { res } = await fetchWithin(this.timeouts.upload, url, { method: 'PUT', headers, body: a.data, credentials: 'omit' })
     if (!res.ok) throw new DevReplyError('server', `upload ${res.status}`)
     return id
   }

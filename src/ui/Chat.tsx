@@ -33,7 +33,8 @@ function items(model: ConversationModel): Item[] {
   return out
 }
 
-export function Chat({ conversationId, category }: { conversationId: string | null; category: Category | null }) {
+/** `continued` (0.5.1): opened from a start topic on the user's open conversation in it. */
+export function Chat({ conversationId, category, continued }: { conversationId: string | null; category: Category | null; continued: boolean }) {
   const s = useStore()
   const model = useMemo(() => new ConversationModel(conversationId, category), [conversationId, category])
   useSubscribe(model)
@@ -45,7 +46,7 @@ export function Chat({ conversationId, category }: { conversationId: string | nu
   const [viewing, setViewing] = useState<string | null>(null)
 
   useEffect(() => {
-    void store.loadProfileIfNeeded()
+    void store.loadProfileIfNeeded(true)
     void model.load()
     const detach = store.attach(model)
     // The 3 s poll pauses while the live socket is up (0.5.0) and picks up again whenever it's down.
@@ -149,7 +150,21 @@ export function Chat({ conversationId, category }: { conversationId: string | nu
         </div>
       )}
       <div class="bottom">
-        {s.profile === null ? null : s.needsName ? (
+        {continued && model.conversationId !== null && (
+          <div class="restart">
+            <button
+              type="button"
+              class="link"
+              data-testid="devreply.new_conversation"
+              onClick={() => store.replace({ screen: 'chat', conversationId: null, category: model.category })}
+            >
+              {t('home.new_conversation')}
+            </button>
+          </div>
+        )}
+        {s.profile === null ? (
+          <ProfileWait error={s.profileError} />
+        ) : s.needsName ? (
           <NameForm />
         ) : (
           <>
@@ -356,6 +371,37 @@ function Notice({ config, email }: { config: Config; email: string | null }) {
           {replyAllow(config)} {email ? t('notice.email', { email }) : t('notice.here')}
         </p>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Until the profile arrives (0.5.1): a loading line, then why it can't load, with Try again. The store
+ * keeps retrying meanwhile; whichever arrives first brings the name form or the composer.
+ */
+function ProfileWait({ error }: { error: DevReplyError | null }) {
+  if (!error)
+    return (
+      <div class="wait" aria-busy="true" data-testid="devreply.profile.loading">
+        <span class="wait-dots" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
+      </div>
+    )
+  return (
+    <div class="wait" role="alert" data-testid="devreply.profile.error">
+      <span class="error">
+        {error.kind === 'network'
+          ? t('error.offline')
+          : error.kind === 'invalidKey' || error.kind === 'forbidden'
+            ? t('error.key')
+            : t('error.generic')}
+      </span>
+      <button type="button" class="link" onClick={() => void store.loadProfileIfNeeded(true)} data-testid="devreply.profile.retry">
+        {t('try_again')}
+      </button>
     </div>
   )
 }

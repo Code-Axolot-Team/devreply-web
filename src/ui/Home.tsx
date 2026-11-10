@@ -1,14 +1,17 @@
 import { useEffect } from 'preact/hooks'
+import { firstWords, openConversationIn, unreadReply } from '../api'
 import { store } from '../store'
 import { t } from '../i18n'
 import { Avatar, CategoryIcon, IconButton, buttonTitle, greeting, intro, relative, replyTime, useStore } from './parts'
 
-/** Greeting, start buttons (they set the category), and the user's conversations. */
+/** Greeting, an unread reply on top (0.5.1), start buttons (they set the category), and the user's conversations. */
 export function Home() {
   const s = useStore()
   const c = s.config
   // Back from a conversation: the list shows its latest message.
   useEffect(() => void store.refresh(), [])
+  const reply = unreadReply(s.conversations)
+  const team = c.teamName || t('team')
   const conversations = [...s.conversations].sort((a, b) => (a.status === 'closed' ? 1 : 0) - (b.status === 'closed' ? 1 : 0))
   return (
     <div class="home">
@@ -42,6 +45,25 @@ export function Home() {
         )}
       </div>
       <div class="home-body">
+        {reply && (
+          <button
+            type="button"
+            class="new-reply"
+            data-testid="devreply.home.new_reply"
+            onClick={() => store.push({ screen: 'chat', conversationId: reply.id, category: reply.category })}
+          >
+            <span class="conv-text">
+              <span class="conv-top">
+                <span class="kicker">{t('home.new_reply', { team })}</span>
+                <span class="when">{relative(reply.lastMessageAt)}</span>
+              </span>
+              <span class="new-reply-text">{firstWords(reply.lastText ?? '')}</span>
+            </span>
+            <span class="count" aria-label={t('a11y.unread', { count: reply.unread })}>
+              {reply.unread}
+            </span>
+          </button>
+        )}
         <h2 class="h2">{t('start_title')}</h2>
         <div class="tiles">
           {c.startButtons.map((b) => (
@@ -49,7 +71,16 @@ export function Home() {
               type="button"
               class="tile"
               data-testid={`devreply.start.${b.category}`}
-              onClick={() => store.push({ screen: 'chat', conversationId: null, category: b.category })}
+              onClick={() => {
+                // An open conversation on this topic: continue it (the answer may be waiting there). A
+                // draft from `open({ message })` is for a new conversation, as before.
+                const open = store.presentation.message ? null : openConversationIn(s.conversations, b.category)
+                store.push(
+                  open
+                    ? { screen: 'chat', conversationId: open.id, category: open.category, continued: true }
+                    : { screen: 'chat', conversationId: null, category: b.category },
+                )
+              }}
             >
               <CategoryIcon category={b.category} />
               {buttonTitle(c, b)}
