@@ -70,7 +70,7 @@ test('a body that stalls after the headers counts too', () => alive(async () => 
 test('a quick answer is unaffected; a non-JSON body is still forgiven', async () => {
   globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ name: 'Debra', email: null }) })
   const client = new ApiClient('https://api.test', { request: 50, upload: 200 })
-  assert.deepEqual(await client.profile('t'), { name: 'Debra', email: null })
+  assert.deepEqual(await client.profile('t'), { name: 'Debra', email: null, noPromotions: false }) // noPromotions: 0.6.0
   globalThis.fetch = async () => ({ ok: false, status: 500, json: async () => { throw new SyntaxError('html') } })
   await assert.rejects(client.profile('t'), (e) => e.kind === 'server' && e.status === 500)
 })

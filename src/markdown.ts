@@ -10,7 +10,7 @@ export interface MdSpan {
   italic?: true
   strike?: true
   code?: true
-  /** http(s) or mailto only. */
+  /** http(s) or mailto, or one of the app's own schemes when the caller passes them (0.6.0). */
   link?: string
 }
 
@@ -24,8 +24,12 @@ type Marks = Omit<MdSpan, 'text'>
 const ESCAPABLE = '\\`*_~[]()#>!+-.'
 const SCHEMES = ['http://', 'https://', 'mailto:']
 
-/** The only URLs a link may have: http, https and mailto. Renderers check it again. */
-export const isSafeUrl = (url: string): boolean => SCHEMES.some((s) => url.startsWith(s))
+/**
+ * The only URLs a link may have: http, https and mailto, and (0.6.0) the app's own deep-link schemes the
+ * caller passes (lowercase, e.g. `kneefit`; the SDK's config checks them). Renderers check it again.
+ */
+export const isSafeUrl = (url: string, schemes: readonly string[] = []): boolean =>
+  SCHEMES.some((s) => url.startsWith(s)) || schemes.some((s) => url.toLowerCase().startsWith(`${s}:`))
 
 const isSpace = (c: string | undefined): boolean => c !== undefined && /\s/u.test(c)
 const isAlnum = (c: string | undefined): boolean => c !== undefined && /[\p{L}\p{N}]/u.test(c)
@@ -53,7 +57,7 @@ const EMPHASIS: [string, (keyof Marks)[]][] = [
 ]
 
 /** Inline Markdown to spans, left to right (reference.py `inline`). */
-export function parseInline(s: string, marks: Marks = {}): MdSpan[] {
+export function parseInline(s: string, marks: Marks = {}, schemes: readonly string[] = []): MdSpan[] {
   const out: MdSpan[] = []
   let buf = ''
   const flush = () => {
@@ -86,8 +90,8 @@ export function parseInline(s: string, marks: Marks = {}): MdSpan[] {
         const url = s.slice(close + 2, end)
         flush()
         const inner: Marks = { ...marks }
-        if (isSafeUrl(url)) inner.link = url
-        out.push(...parseInline(s.slice(i + 1, close), inner))
+        if (isSafeUrl(url, schemes)) inner.link = url
+        out.push(...parseInline(s.slice(i + 1, close), inner, schemes))
         i = end + 1
         continue
       }
@@ -112,7 +116,7 @@ export function parseInline(s: string, marks: Marks = {}): MdSpan[] {
       flush()
       const inner: Marks = { ...marks }
       for (const a of add) (inner as Record<string, unknown>)[a] = true
-      out.push(...parseInline(s.slice(i + n, k), inner))
+      out.push(...parseInline(s.slice(i + n, k), inner, schemes))
       i = k + n
       handled = true
       break
@@ -170,8 +174,9 @@ type Open =
   | { kind: 'paragraph' | 'quote'; lines: string[] }
   | { kind: 'list'; ordered: boolean; start: number; items: string[][] }
 
-/** A message's Markdown to blocks, line by line (reference.py `parse`). */
-export function parseMarkdown(md: string): MdBlock[] {
+/** A message's Markdown to blocks, line by line (reference.py `parse`). `schemes` (0.6.0): the app's own
+ *  deep-link schemes, allowed in links next to http(s) and mailto. */
+export function parseMarkdown(md: string, schemes: readonly string[] = []): MdBlock[] {
   const lines = md.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
   const blocks: MdBlock[] = []
   let cur: Open | null = null
@@ -179,9 +184,9 @@ export function parseMarkdown(md: string): MdBlock[] {
   const close = () => {
     if (!cur) return
     if (cur.kind === 'list') {
-      blocks.push({ type: 'list', ordered: cur.ordered, start: cur.start, items: cur.items.map((item) => parseInline(item.join('\n'))) })
+      blocks.push({ type: 'list', ordered: cur.ordered, start: cur.start, items: cur.items.map((item) => parseInline(item.join('\n'), {}, schemes)) })
     } else {
-      blocks.push({ type: cur.kind, spans: parseInline(cur.lines.join('\n')) })
+      blocks.push({ type: cur.kind, spans: parseInline(cur.lines.join('\n'), {}, schemes) })
     }
     cur = null
   }
@@ -207,7 +212,7 @@ export function parseMarkdown(md: string): MdBlock[] {
     const heading = /^\s*(#{1,6})\s+(.*?)\s*$/su.exec(line)
     if (heading) {
       close()
-      blocks.push({ type: 'heading', spans: parseInline(heading[2]) })
+      blocks.push({ type: 'heading', spans: parseInline(heading[2], {}, schemes) })
       i++
       continue
     }

@@ -87,7 +87,6 @@ export function App() {
                 key={`${route.conversationId ?? 'new'}-${route.category ?? ''}`}
                 conversationId={route.conversationId}
                 category={route.category}
-                continued={route.continued ?? false}
               />
             )}
           </div>

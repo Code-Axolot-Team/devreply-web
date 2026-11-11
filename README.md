@@ -142,6 +142,16 @@ If your site sends a Content-Security-Policy: `script-src` and `font-src https:/
 without it the chat still works, polling every 3 s),
 `img-src https://api.devreply.com https://storage.googleapis.com blob:` (team photos and your app icon).
 
+## Link buttons, gifts and forms (0.6)
+
+Replies from your team can carry buttons that open a link, gifts and several questions at once. Nothing to call:
+- **Link buttons** open your app's own deep link (the scheme you set in DevReply → Settings → deep link) or an https
+  link, through the system, so your existing deep-link handling decides what happens (open a screen, a paywall).
+- **Gifts** open your deep link with `devreply_gift=gft_…` added. That token is the only proof: before granting
+  anything, your backend checks it once with `POST https://api.devreply.com/v1/project/gifts/claim {"token": "gft_…"}`
+  (a read-and-write secret key) and gets the user and whether it was claimed already. Never trust the link alone.
+- **Forms** are answered in the chat; your team sees the answers in the inbox (and your server, with webhooks).
+
 ## Sign-in, sign-out and account deletion
 
 If your app has accounts:

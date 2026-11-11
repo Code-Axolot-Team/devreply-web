@@ -40,6 +40,9 @@ export interface Config {
   replyWithinKey: string | null
   /** False when the team switched the chat off in the dashboard (0.4.4). */
   enabled: boolean
+  /** The app's own deep-link schemes (0.6.0), e.g. `kneefit`: link buttons, gifts and Markdown links may
+   *  open them, next to https. Lowercase, without `://`. */
+  linkSchemes: string[]
 }
 
 /** Who replied (0.4): a teammate's name, title and photo. */
@@ -67,7 +70,38 @@ export type Block =
   | { type: 'markdown'; text: string; fallback: string }
   /** A question with answer buttons (0.5.0): `text` is the question in Markdown; 2 to 5 options. */
   | { type: 'buttons'; text: string; options: ButtonOption[]; fallback: string }
+  /** Link buttons (0.6.0): an optional Markdown intro and 1 to 3 buttons that open a URL. */
+  | { type: 'links'; text: string | null; links: LinkButton[]; fallback: string }
+  /** A gift (0.6.0): a card with "Open gift", which opens `url` (it carries a one-time token). */
+  | { type: 'gift'; giftId: string; title: string; text: string; url: string; expiresAt: string | null; fallback: string }
+  /** Several questions in one reply (0.6.0), answered in one go. */
+  | { type: 'form'; text: string | null; questions: FormQuestion[]; fallback: string }
   | { type: 'unsupported'; fallback: string }
+
+/** One button of a links block (0.6.0). */
+export interface LinkButton {
+  id: string
+  label: string
+  url: string
+}
+
+/** One question of a form (0.6.0): `single` and `multi` have 2 to 6 options, `text` none. */
+export interface FormQuestion {
+  id: string
+  text: string
+  kind: 'single' | 'multi' | 'text'
+  options: ButtonOption[]
+  required: boolean
+}
+
+/** A form's answers by question id (0.6.0): an option id (single), option ids (multi) or text. */
+export type FormAnswers = Record<string, string | string[]>
+
+/** Which form a user message answered, and how (0.6.0). */
+export interface FormAnswer {
+  messageId: string
+  answers: FormAnswers
+}
 
 /** One answer of a buttons question (0.5.0); ids are the server's. */
 export interface ButtonOption {
@@ -92,11 +126,17 @@ export interface Message {
   persona?: Persona
   /** A user message that answered a buttons question (0.5.0). */
   answer?: Answer
+  /** A user message that answered a form (0.6.0). */
+  formAnswer?: FormAnswer
+  /** An offer or campaign from the team (0.6.0): an Offer label and "Don't send me offers". */
+  promotional?: true
 }
 
 export interface Profile {
   name: string | null
   email: string | null
+  /** The user asked for no offers (0.6.0). */
+  noPromotions: boolean
 }
 
 export interface Device {
@@ -155,6 +195,7 @@ export function placeholderConfig(appName: string): Config {
     localize: ['greeting', 'intro', 'start_buttons', 'reply_time', 'reply_within'],
     replyWithinKey: '3_working_days',
     enabled: true,
+    linkSchemes: [],
   }
 }
 
@@ -193,7 +234,29 @@ export function parseConfig(raw: unknown, appName: string): Config {
     localize: Array.isArray(o.localize) ? o.localize.filter((x): x is string => typeof x === 'string') : [],
     replyWithinKey: str(o.reply_within_key),
     enabled: o.enabled !== false,
+    linkSchemes: Array.isArray(o.link_schemes) ? o.link_schemes.flatMap((x) => (typeof x === 'string' && isAppScheme(x.toLowerCase()) ? [x.toLowerCase()] : [])) : [],
   }
+}
+
+// ---- links (0.6.0): https, or the app's own deep-link scheme; nothing else is ever opened ----
+
+/** Schemes an app can never claim as its own: they'd run code or read the browser's own data. */
+const NEVER = ['javascript', 'data', 'vbscript', 'file', 'blob', 'about', 'filesystem', 'http', 'https', 'ws', 'wss', 'chrome', 'view-source']
+
+/** A scheme an app may register for its deep links (`kneefit`, `com.example.app`). */
+export const isAppScheme = (s: string): boolean => /^[a-z][a-z0-9+.-]{0,63}$/.test(s) && !NEVER.includes(s)
+
+/**
+ * How a link opens: `tab` (https: a new tab, no opener), `app` (the app's own scheme: `location.href`,
+ * the OS hands it to the app), or null (anything else: never opened).
+ */
+export function linkTarget(url: string, schemes: readonly string[]): 'tab' | 'app' | null {
+  const u = url.trim()
+  if (/^https:\/\/[^\s]/i.test(u) && !/\s/.test(u)) return 'tab'
+  const m = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(u)
+  if (!m || /\s/.test(u)) return null
+  const scheme = m[1].toLowerCase()
+  return isAppScheme(scheme) && schemes.includes(scheme) ? 'app' : null
 }
 
 export function parseConversation(o: Record<string, unknown>): Conversation | null {
@@ -279,9 +342,111 @@ export function parseBlock(b: Record<string, unknown>): Block {
       const numbered = options.map((o, i) => `${i + 1}. ${o.label}`).join('\n')
       return { type: 'buttons', text, options, fallback: str(b.fallback) ?? `${question}\n\n${numbered}` }
     }
+    case 'links': {
+      const links = lossy(b.links, (l) => {
+        const id = str(l.id)
+        const label = str(l.label)?.trim()
+        const to = str(l.url)?.trim()
+        return id && label && to ? { id, label: Array.from(label).slice(0, 40).join(''), url: to } : null
+      }).slice(0, 3)
+      if (links.length === 0) return { type: 'unsupported', fallback }
+      const text = str(b.text)?.trim() || null
+      const lines = links.map((l) => `${l.label}: ${l.url}`).join('\n')
+      return { type: 'links', text, links, fallback: str(b.fallback) ?? (text ? `${plainMarkdown(parseMarkdown(text))}\n\n${lines}` : lines) }
+    }
+    case 'gift': {
+      const giftId = str(b.gift_id)
+      const title = str(b.title)?.trim()
+      if (!giftId || !title || !url) return { type: 'unsupported', fallback }
+      const text = str(b.text)?.trim() ?? ''
+      const expires = str(b.expires_at)
+      return {
+        type: 'gift',
+        giftId,
+        title,
+        text,
+        url,
+        expiresAt: expires && !Number.isNaN(Date.parse(expires)) ? expires : null,
+        fallback: str(b.fallback) ?? `🎁 ${title}${text ? `. ${text}` : ''}\nOpen it: ${url}`,
+      }
+    }
+    case 'form': {
+      // A question this SDK can't show (an unknown kind, too few options) would leave the form
+      // unanswerable: then the whole form shows its fallback.
+      const raw = Array.isArray(b.questions) ? b.questions : []
+      const questions: FormQuestion[] = []
+      for (const x of raw.slice(0, 5)) {
+        const q = parseQuestion(obj(x))
+        if (!q) return { type: 'unsupported', fallback }
+        questions.push(q)
+      }
+      if (questions.length === 0 || new Set(questions.map((q) => q.id)).size !== questions.length) return { type: 'unsupported', fallback }
+      return { type: 'form', text: str(b.text)?.trim() || null, questions, fallback }
+    }
+    case 'form_answer':
+      // A form's answer as its own block: its readable summary.
+      return { type: 'text', text: str(b.text) ?? fallback }
     default:
       return { type: 'unsupported', fallback }
   }
+}
+
+function parseQuestion(q: Record<string, unknown>): FormQuestion | null {
+  const id = str(q.id)
+  const text = str(q.text)?.trim()
+  const kind = q.kind === 'single' || q.kind === 'multi' || q.kind === 'text' ? q.kind : null
+  if (!id || !text || !kind) return null
+  const options = kind === 'text' ? [] : lossy(q.options, (o) => {
+    const oid = str(o.id)
+    const label = str(o.label)?.trim()
+    return oid && label ? { id: oid, label } : null
+  }).slice(0, 6)
+  if (kind !== 'text' && options.length < 2) return null
+  return { id, text, kind, options, required: q.required === true }
+}
+
+/** `{"message_id", "answers": {…}}` from the server (0.6.0); null for anything else. Answers that
+ *  aren't text or a list of texts are left out. */
+export function parseFormAnswer(v: unknown): FormAnswer | null {
+  const o = obj(v)
+  const messageId = str(o.message_id)
+  if (!messageId) return null
+  const answers: FormAnswers = {}
+  for (const [k, a] of Object.entries(obj(o.answers))) {
+    if (typeof a === 'string') answers[k] = a
+    else if (Array.isArray(a)) answers[k] = a.filter((x): x is string => typeof x === 'string')
+  }
+  return { messageId, answers }
+}
+
+/** What the user filled in so far (0.6.0): an option, options, or text per question. */
+export type FormDraft = Record<string, string | string[] | undefined>
+
+/** The required questions still without an answer (0.6.0). */
+export function missingAnswers(questions: readonly FormQuestion[], draft: FormDraft): string[] {
+  return questions.filter((q) => q.required && !hasAnswer(q, draft[q.id])).map((q) => q.id)
+}
+
+function hasAnswer(q: FormQuestion, a: string | string[] | undefined): boolean {
+  if (q.kind === 'text') return typeof a === 'string' && a.trim().length > 0
+  if (q.kind === 'single') return typeof a === 'string' && q.options.some((o) => o.id === a)
+  return Array.isArray(a) && a.some((id) => q.options.some((o) => o.id === id))
+}
+
+/**
+ * The `answers` the server takes (0.6.0): single → an option id, multi → option ids in the form's
+ * order, text → trimmed (up to 2000 characters). Unanswered questions and unknown ids are left out.
+ */
+export function encodeFormAnswers(questions: readonly FormQuestion[], draft: FormDraft): FormAnswers {
+  const out: FormAnswers = {}
+  for (const q of questions) {
+    const a = draft[q.id]
+    if (!hasAnswer(q, a)) continue
+    if (q.kind === 'text') out[q.id] = Array.from((a as string).trim()).slice(0, 2000).join('')
+    else if (q.kind === 'single') out[q.id] = a as string
+    else out[q.id] = q.options.filter((o) => (a as string[]).includes(o.id)).map((o) => o.id)
+  }
+  return out
 }
 
 /** `{"message_id", "option_id"}` from the server; null for anything else. */
@@ -306,6 +471,8 @@ export function parseMessage(o: Record<string, unknown>): Message | null {
   const first = obj(blocks[0])
   // An answer to a buttons question: on the message, or on one of its blocks.
   const answer = author === 'user' ? (parseAnswer(o.answer) ?? blocks.map((b) => parseAnswer(obj(b).answer)).find((a) => a) ?? null) : null
+  const formAnswer =
+    author === 'user' ? (parseFormAnswer(o.form_answer) ?? blocks.map((b) => parseFormAnswer(obj(b).form_answer)).find((a) => a) ?? null) : null
   const systemKey =
     author === 'system' && (str(first.key) === 'resolved' || str(first.text) === RESOLVED_TEXT) ? 'resolved' : undefined
   return {
@@ -316,6 +483,8 @@ export function parseMessage(o: Record<string, unknown>): Message | null {
     ...(persona ? { persona } : {}),
     ...(systemKey ? { systemKey } : {}),
     ...(answer ? { answer } : {}),
+    ...(formAnswer ? { formAnswer } : {}),
+    ...(author !== 'user' && o.promotional === true ? { promotional: true as const } : {}),
   }
 }
 
@@ -358,7 +527,9 @@ export function plainText(m: Message): string {
             ? b.name
             : b.type === 'buttons'
               ? plainMarkdown(parseMarkdown(b.text))
-              : b.fallback,
+              : b.type === 'gift'
+                ? `🎁 ${b.title}`
+                : b.fallback,
     )
     .join('\n')
 }
@@ -506,16 +677,41 @@ export class ApiClient {
 
   async profile(token: string): Promise<Profile> {
     const r = obj(await this.send('GET', 'v1/me', token))
-    return { name: str(r.name), email: str(r.email) }
+    return { name: str(r.name), email: str(r.email), noPromotions: r.no_promotions === true }
   }
 
   async updateProfile(
     token: string,
-    patch: { name?: string; email?: string; user_id?: string; attributes?: Record<string, string | number | boolean | null> },
+    patch: {
+      name?: string
+      email?: string
+      user_id?: string
+      attributes?: Record<string, string | number | boolean | null>
+      /** "Don't send me offers" (0.6.0). */
+      no_promotions?: boolean
+    },
   ): Promise<Profile & { restored: boolean }> {
     const r = obj(await this.send('PATCH', 'v1/me', token, { attributes: {}, ...patch }))
     // `restored` (0.5.0): login moved this install back to the same account's user on this device.
-    return { name: str(r.name), email: str(r.email), restored: r.restored === true }
+    const noPromotions = typeof r.no_promotions === 'boolean' ? r.no_promotions : patch.no_promotions === true
+    return { name: str(r.name), email: str(r.email), noPromotions, restored: r.restored === true }
+  }
+
+  /** A link button was tapped (0.6.0): for the team's stats and webhooks. 204. */
+  async tap(token: string, conversation: string, messageId: string, linkId: string): Promise<void> {
+    await this.send('POST', `v1/conversations/${conversation}/taps`, token, { message_id: messageId, link_id: linkId })
+  }
+
+  /** "Open gift" was tapped (0.6.0). 204. */
+  async giftOpened(token: string, giftId: string): Promise<void> {
+    await this.send('POST', `v1/gifts/${encodeURIComponent(giftId)}/opened`, token)
+  }
+
+  /** A form's answers in one go (0.6.0): the user's answer message. 409: already answered; 400: a
+   *  required one is missing or an id is unknown. */
+  async answerForm(token: string, conversation: string, messageId: string, answers: FormAnswers): Promise<Message | null> {
+    const r = await this.send('POST', `v1/conversations/${conversation}/messages`, token, { form_answer: { message_id: messageId, answers } })
+    return parseMessage(obj(r))
   }
 
   /** A signed upload slot, then the bytes straight to storage. Returns the attachment id. */

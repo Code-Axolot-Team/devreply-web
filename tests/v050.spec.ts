@@ -237,8 +237,8 @@ test('buttons: 409 and the list has no answer yet: all quiet, none chosen', asyn
   await expectAnswered(page, null)
 })
 
-test('buttons needing a newer SDK (min_sdk 0.6.0 on this 0.5.0 build): the fallback, no buttons @smoke', async ({ page }) => {
-  await stub(page, thread({ minSdk: '0.6.0' }))
+test('buttons needing a newer SDK (min_sdk 0.7.0 on this 0.6.0 build): the fallback, no buttons @smoke', async ({ page }) => {
+  await stub(page, thread({ minSdk: '0.7.0' }))
   await openChat(page)
   await expect(page.getByTestId('devreply.buttons')).toHaveCount(0)
   const bubble = page.locator('.bubble.team.muted')

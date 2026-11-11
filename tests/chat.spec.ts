@@ -79,10 +79,9 @@ test('first message: notice with the reply time, optional email, Enter sends @sm
   // Back home: listed; a new request doesn't ask for the email again.
   await page.getByRole('button', { name: 'Back' }).click()
   await expect(page.getByText('Second line one')).toBeVisible()
-  await page.getByTestId('devreply.start.question').click()
-  // 0.5.1: the topic continues the open question; a new one is one tap away.
-  await page.getByTestId('devreply.new_conversation').click()
-  await page.getByTestId('devreply.composer').fill(`Another question ${nonce}`)
+  // Another topic starts a new request (the question topic would continue the open question).
+  await page.getByTestId('devreply.start.idea').click()
+  await page.getByTestId('devreply.composer').fill(`An idea ${nonce}`)
   await page.getByTestId('devreply.send').click()
   await expect(page.getByTestId('devreply.notice')).toBeVisible({ timeout: 10_000 })
   await expect(page.getByTestId('devreply.emailask.field')).toHaveCount(0)

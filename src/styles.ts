@@ -325,6 +325,45 @@ svg{display:block;width:100%;height:100%}
 .choice-check{flex:none;font-size:17px;line-height:1}
 .choice.chosen{color:var(--dr-on-primary);background:var(--dr-primary);border-width:calc(3px * var(--dr-ow))}
 .choices.answered .choice:not(.chosen){opacity:.45;box-shadow:none;font-weight:600}
+/* Link buttons (0.6.0): outlined like the answer buttons, with an arrow; one that can't open stays quiet. */
+.choice-go{flex:none;width:18px;height:18px}
+.choices.links .choice:disabled{opacity:.45;box-shadow:none}
+/* Offers (0.6.0): a small tag above, a quiet opt-out under. */
+.offer-tag{align-self:flex-start;font-size:11px;padding:4px 7px}
+.offer-out{display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;font-size:13px;font-weight:600;color:var(--dr-muted)}
+.offer-out .link{font-size:13px;text-decoration:underline;text-underline-offset:3px}
+/* Gift (0.6.0): a wrapped box on top (paper, ribbon, bow), the title, one line and Open gift. */
+.gift{width:270px;max-width:100%;background:var(--dr-surface);color:var(--dr-ink);border:calc(3px * var(--dr-ow)) solid var(--dr-outline);box-shadow:4px 4px 0 var(--dr-shadow)}
+.gift-wrap{position:relative;height:84px;border-bottom:calc(3px * var(--dr-ow)) solid var(--dr-outline);
+  background:linear-gradient(90deg,transparent calc(50% - 11px),var(--dr-lemon) calc(50% - 11px),var(--dr-lemon) calc(50% + 11px),transparent calc(50% + 11px)),
+  repeating-linear-gradient(45deg,var(--dr-accent) 0 12px,color-mix(in srgb,var(--dr-accent) 70%,#fff) 12px 24px)}
+.gift-wrap::after{content:"";position:absolute;inset:auto 0 22px;height:16px;background:var(--dr-lemon);border-block:calc(2px * var(--dr-ow)) solid var(--dr-outline)}
+.gift-wrap::before{content:"";position:absolute;inset:0 calc(50% - 11px);border-inline:calc(2px * var(--dr-ow)) solid var(--dr-outline)}
+.gift-bow{position:absolute;z-index:1;left:50%;bottom:16px;width:56px;height:28px;transform:translateX(-50%)}
+.gift-bow::before,.gift-bow::after{content:"";position:absolute;top:0;width:24px;height:22px;background:var(--dr-lemon);border:calc(2.5px * var(--dr-ow)) solid var(--dr-outline);border-radius:50% 50% 50% 50% / 60% 60% 40% 40%}
+.gift-bow::before{left:0;transform:rotate(-20deg)}
+.gift-bow::after{right:0;transform:rotate(20deg)}
+.gift-body{display:flex;flex-direction:column;gap:6px;padding:12px 14px 14px}
+.gift-title{font:400 19px/1.2 var(--dr-display)}
+.gift-body p{margin:0 0 6px;font-size:15px;font-weight:500}
+.gift.expired .gift-wrap{filter:grayscale(1);opacity:.55}
+.gift.expired .btn:disabled{opacity:1;background:var(--dr-grey);color:var(--dr-muted);box-shadow:none}
+/* Forms (0.6.0): the questions in one card, Send answers at the end; answered, a read-only record. */
+.form{width:340px;max-width:100%;display:flex;flex-direction:column;gap:14px;padding:14px;background:var(--dr-surface);color:var(--dr-ink);
+  border:calc(3px * var(--dr-ow)) solid var(--dr-outline);box-shadow:4px 4px 0 var(--dr-shadow)}
+.form-intro{font-size:16px;font-weight:500}
+.q{margin:0;padding:0;border:0;min-width:0;display:flex;flex-direction:column;gap:8px}
+.q-text{padding:0;font-weight:700;font-size:16px;line-height:1.3;margin-bottom:8px}
+.q-req{color:var(--dr-error)}
+.q-hint{margin-top:-6px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dr-muted)}
+.q .choices{max-width:none;margin:0}
+.q .choice{min-height:40px;padding:8px 12px;font-size:15px}
+.choice-mark{flex:none;width:20px;height:20px;display:grid;place-items:center;font-size:13px;line-height:1;background:var(--dr-surface);color:var(--dr-ink);
+  border:calc(2px * var(--dr-ow)) solid var(--dr-outline)}
+.choice-mark.single{border-radius:50%}
+.q-field{height:auto;min-height:64px;padding:10px 12px;font-size:16px;resize:vertical}
+.q-answer{padding:10px 12px;font-size:15px;font-weight:500;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--dr-code);border:calc(2px * var(--dr-ow)) solid var(--dr-outline)}
+.q.missing .choice,.q.missing .q-field{border-color:var(--dr-error)}
 .system{text-align:center;font-size:13px;font-weight:700;color:var(--dr-muted);padding:6px 0}
 .photo{display:block;max-width:220px;max-height:260px;border:calc(3px * var(--dr-ow)) solid var(--dr-outline);box-shadow:4px 4px 0 var(--dr-shadow);background:var(--dr-grey);cursor:zoom-in}
 .photo img{display:block;max-width:214px;max-height:254px;object-fit:cover}
@@ -347,8 +386,6 @@ svg{display:block;width:100%;height:100%}
 .card-row{display:flex;gap:10px;align-items:center}
 .card-title{font-weight:700;font-size:15px;flex:1}
 .link{font-weight:700;font-size:14px;color:var(--dr-muted)}
-.restart{display:flex;justify-content:center;padding:8px 14px;background:var(--dr-bg);border-top:calc(3px * var(--dr-ow)) solid var(--dr-outline)}
-.restart .link{text-decoration:underline;text-underline-offset:3px}
 .wait{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;min-height:72px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));
   background:var(--dr-surface);border-top:calc(3px * var(--dr-ow)) solid var(--dr-outline);text-align:center}
 .wait .link{text-decoration:underline;text-underline-offset:3px}

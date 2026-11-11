@@ -77,7 +77,7 @@ export function Home() {
                 const open = store.presentation.message ? null : openConversationIn(s.conversations, b.category)
                 store.push(
                   open
-                    ? { screen: 'chat', conversationId: open.id, category: open.category, continued: true }
+                    ? { screen: 'chat', conversationId: open.id, category: open.category }
                     : { screen: 'chat', conversationId: null, category: b.category },
                 )
               }}

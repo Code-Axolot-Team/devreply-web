@@ -1,5 +1,20 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks'
-import { type Block, type ButtonOption, type Category, type Config, DevReplyError, type Message, type Outgoing } from '../api'
+import {
+  type Block,
+  type ButtonOption,
+  type Category,
+  type Config,
+  DevReplyError,
+  type FormAnswer,
+  type FormAnswers,
+  type FormDraft,
+  type FormQuestion,
+  type Message,
+  type Outgoing,
+  encodeFormAnswers,
+  linkTarget,
+  missingAnswers,
+} from '../api'
 import { intlLocale, t } from '../i18n'
 import { ConversationModel, type Pending, store } from '../store'
 import { parseMarkdown, plainMarkdown } from '../markdown'
@@ -33,8 +48,7 @@ function items(model: ConversationModel): Item[] {
   return out
 }
 
-/** `continued` (0.5.1): opened from a start topic on the user's open conversation in it. */
-export function Chat({ conversationId, category, continued }: { conversationId: string | null; category: Category | null; continued: boolean }) {
+export function Chat({ conversationId, category }: { conversationId: string | null; category: Category | null }) {
   const s = useStore()
   const model = useMemo(() => new ConversationModel(conversationId, category), [conversationId, category])
   useSubscribe(model)
@@ -139,6 +153,8 @@ export function Chat({ conversationId, category, continued }: { conversationId: 
                   onOpenImage={setViewing}
                   answer={model.answerTo(it.message.id)}
                   onAnswer={(option) => model.answer(it.message.id, option)}
+                  model={model}
+                  schemes={s.config.linkSchemes}
                 />
               ) : it.kind === 'pending' ? (
                 <PendingRow key={it.key} item={it.item} onRetry={() => model.retry(it.item)} />
@@ -150,18 +166,6 @@ export function Chat({ conversationId, category, continued }: { conversationId: 
         </div>
       )}
       <div class="bottom">
-        {continued && model.conversationId !== null && (
-          <div class="restart">
-            <button
-              type="button"
-              class="link"
-              data-testid="devreply.new_conversation"
-              onClick={() => store.replace({ screen: 'chat', conversationId: null, category: model.category })}
-            >
-              {t('home.new_conversation')}
-            </button>
-          </div>
-        )}
         {s.profile === null ? (
           <ProfileWait error={s.profileError} />
         ) : s.needsName ? (
@@ -199,6 +203,8 @@ function MessageRow({
   onOpenImage,
   answer,
   onAnswer,
+  model,
+  schemes,
 }: {
   message: Message
   showsPersona: boolean
@@ -208,6 +214,10 @@ function MessageRow({
   /** Buttons questions (0.5.0): the chosen option, null if answered elsewhere, undefined while open. */
   answer: string | null | undefined
   onAnswer: (option: ButtonOption) => void
+  /** Link buttons, gifts and forms (0.6.0) report to and answer through the conversation. */
+  model: ConversationModel
+  /** The app's own deep-link schemes (0.6.0). */
+  schemes: readonly string[]
 }) {
   if (message.author === 'system') {
     // e.g. "✓ Marked as resolved…": a quiet line, not a bubble. Known lines in the user's language.
@@ -227,6 +237,11 @@ function MessageRow({
             {persona.title && <span class="muted">{persona.title}</span>}
           </div>
         )}
+        {message.promotional && (
+          <span class="kicker inv offer-tag" data-testid="devreply.offer.label">
+            {t('offer.label')}
+          </span>
+        )}
         {message.blocks.map((b, i) =>
           b.type === 'text' ? (
             <div key={i} class={`bubble ${me ? 'me' : 'team'}`}>
@@ -240,7 +255,7 @@ function MessageRow({
               </div>
             ) : (
               <div key={i} class="bubble team md" data-testid="devreply.markdown">
-                <Markdown text={b.text} />
+                <Markdown text={b.text} schemes={schemes} />
               </div>
             )
           ) : b.type === 'buttons' ? (
@@ -249,8 +264,25 @@ function MessageRow({
                 {b.fallback}
               </div>
             ) : (
-              <Buttons key={i} block={b} answer={answer} onAnswer={onAnswer} />
+              <Buttons key={i} block={b} answer={answer} onAnswer={onAnswer} schemes={schemes} />
             )
+          ) : (b.type === 'links' || b.type === 'gift' || b.type === 'form') && me ? (
+            <div key={i} class="bubble me">
+              {b.fallback}
+            </div>
+          ) : b.type === 'links' ? (
+            <Links key={i} block={b} schemes={schemes} onTap={(link) => model.tapLink(message.id, link)} />
+          ) : b.type === 'gift' ? (
+            <Gift key={i} block={b} schemes={schemes} onOpen={() => model.openGift(b.giftId, b.url)} />
+          ) : b.type === 'form' ? (
+            <Form
+              key={i}
+              block={b}
+              schemes={schemes}
+              answer={model.formAnswerTo(message.id)}
+              sending={model.isSendingForm(message.id)}
+              onSend={(answers) => model.answerForm(message.id, answers)}
+            />
           ) : b.type === 'image' ? (
             <button key={i} type="button" class="photo" aria-label={t('open_photo')} onClick={() => onOpenImage(b.url)}>
               <img src={b.url} alt={t('photo')} width={b.width} height={b.height} loading="lazy" />
@@ -271,7 +303,225 @@ function MessageRow({
             </div>
           ),
         )}
+        {message.promotional && <OfferOptOut />}
       </div>
+    </div>
+  )
+}
+
+/** Under an offer (0.6.0): "Don't send me offers", then "You won't get offers. Undo". The profile's
+ *  `no_promotions` is the state, so an earlier choice shows too. */
+function OfferOptOut() {
+  const s = useStore()
+  if (!s.profile) return null
+  return s.profile.noPromotions ? (
+    <div class="offer-out" data-testid="devreply.offer.opted_out">
+      <span>{t('offer.opted_out')}</span>
+      <button type="button" class="link" onClick={() => void store.setNoPromotions(false)} data-testid="devreply.offer.undo">
+        {t('offer.undo')}
+      </button>
+    </div>
+  ) : (
+    <div class="offer-out">
+      <button type="button" class="link" onClick={() => void store.setNoPromotions(true)} data-testid="devreply.offer.opt_out">
+        {t('offer.opt_out')}
+      </button>
+    </div>
+  )
+}
+
+/** Link buttons (0.6.0): the intro, then 1 to 3 outlined buttons. A tap opens the link (https in a new
+ *  tab, the app's own scheme in place); one this SDK may not open stays disabled. */
+function Links({
+  block,
+  schemes,
+  onTap,
+}: {
+  block: Extract<Block, { type: 'links' }>
+  schemes: readonly string[]
+  onTap: (link: Extract<Block, { type: 'links' }>['links'][number]) => void
+}) {
+  return (
+    <>
+      {block.text && (
+        <div class="bubble team md" data-testid="devreply.links.text">
+          <Markdown text={block.text} schemes={schemes} />
+        </div>
+      )}
+      <div class="choices links" data-testid="devreply.links">
+        {block.links.map((l) => (
+          <button
+            key={l.id}
+            type="button"
+            class="choice linkbtn"
+            disabled={linkTarget(l.url, schemes) === null}
+            onClick={() => onTap(l)}
+            data-testid={`devreply.links.link.${l.id}`}
+          >
+            <span class="choice-label">{l.label}</span>
+            <Icon name="arrow" class="i choice-go" />
+          </button>
+        ))}
+      </div>
+    </>
+  )
+}
+
+/** A gift (0.6.0): a small wrapped box, the title and one line, and "Open gift"; after `expires_at`
+ *  the button says the gift has expired (the card turns over by itself at that moment). */
+function Gift({ block, schemes, onOpen }: { block: Extract<Block, { type: 'gift' }>; schemes: readonly string[]; onOpen: () => void }) {
+  const [now, setNow] = useState(() => Date.now())
+  const expiresAt = block.expiresAt ? Date.parse(block.expiresAt) : null
+  useEffect(() => {
+    if (expiresAt === null || expiresAt <= now) return
+    const id = window.setTimeout(() => setNow(Date.now()), Math.min(expiresAt - now + 50, 2 ** 31 - 1))
+    return () => window.clearTimeout(id)
+  }, [expiresAt, now])
+  const expired = expiresAt !== null && now >= expiresAt
+  return (
+    <div class={`gift ${expired ? 'expired' : ''}`} data-testid="devreply.gift">
+      <div class="gift-wrap" aria-hidden="true">
+        <span class="gift-bow" />
+      </div>
+      <div class="gift-body">
+        <span class="kicker">{t('gift.label')}</span>
+        <b class="gift-title">{block.title}</b>
+        {block.text && <p>{block.text}</p>}
+        <button
+          type="button"
+          class="btn"
+          disabled={expired || linkTarget(block.url, schemes) === null}
+          onClick={onOpen}
+          data-testid={expired ? 'devreply.gift.expired' : 'devreply.gift.open'}
+        >
+          {expired ? t('gift.expired') : t('gift.open')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Several questions in one reply (0.6.0): single choice, any number (multi), and free text, sent
+ * together once. A required one left open says so when the user sends. Answered, the form stays as
+ * a read-only record of the answers.
+ */
+function Form({
+  block,
+  schemes,
+  answer,
+  sending,
+  onSend,
+}: {
+  block: Extract<Block, { type: 'form' }>
+  schemes: readonly string[]
+  answer: FormAnswer | undefined
+  sending: boolean
+  onSend: (answers: FormAnswers) => Promise<string | null>
+}) {
+  const [draft, setDraft] = useState<FormDraft>({})
+  const [tried, setTried] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const done = answer !== undefined
+  const values: FormDraft = done ? answer.answers : draft
+  const missing = tried && !done ? missingAnswers(block.questions, draft) : []
+
+  async function send() {
+    setTried(true)
+    setError(null)
+    if (missingAnswers(block.questions, draft).length) return
+    setError(await onSend(encodeFormAnswers(block.questions, draft)))
+  }
+  const set = (q: FormQuestion, v: string | string[]) => setDraft((d) => ({ ...d, [q.id]: v }))
+
+  return (
+    <div class={`form ${done ? 'answered' : ''}`} data-testid="devreply.form">
+      {block.text && (
+        <div class="md form-intro">
+          <Markdown text={block.text} schemes={schemes} />
+        </div>
+      )}
+      {block.questions.map((q) => {
+        const v = values[q.id]
+        const isMissing = missing.includes(q.id)
+        return (
+          <fieldset key={q.id} class={`q ${isMissing ? 'missing' : ''}`} data-testid={`devreply.form.question.${q.id}`}>
+            <legend class="q-text">
+              {q.text}
+              {q.required && !done && (
+                <span class="q-req" aria-hidden="true">
+                  {' *'}
+                </span>
+              )}
+            </legend>
+            {q.kind === 'multi' && !done && <span class="q-hint">{t('form.pick_any')}</span>}
+            {q.kind === 'text' ? (
+              done ? (
+                <div class="q-answer" data-testid={`devreply.form.answer.${q.id}`}>
+                  {typeof v === 'string' && v.trim() ? v : '—'}
+                </div>
+              ) : (
+                <textarea
+                  class="field q-field"
+                  rows={2}
+                  placeholder={t('form.your_answer')}
+                  aria-label={q.text}
+                  value={typeof v === 'string' ? v : ''}
+                  disabled={sending}
+                  onInput={(e) => set(q, (e.target as HTMLTextAreaElement).value)}
+                  data-testid={`devreply.form.text.${q.id}`}
+                />
+              )
+            ) : (
+              <div class={`choices ${done ? 'answered' : ''}`} role={q.kind === 'single' ? 'radiogroup' : 'group'} aria-label={q.text}>
+                {q.options.map((o) => {
+                  const on = q.kind === 'single' ? v === o.id : Array.isArray(v) && v.includes(o.id)
+                  return (
+                    <button
+                      key={o.id}
+                      type="button"
+                      role={q.kind === 'single' ? 'radio' : 'checkbox'}
+                      aria-checked={on}
+                      class={`choice ${on ? 'chosen' : ''}`}
+                      disabled={done || sending}
+                      onClick={() => {
+                        if (q.kind === 'single') set(q, o.id)
+                        else {
+                          const list = Array.isArray(v) ? v : []
+                          set(q, on ? list.filter((x) => x !== o.id) : [...list, o.id])
+                        }
+                      }}
+                      data-testid={`devreply.form.option.${q.id}.${o.id}`}
+                    >
+                      <span class={`choice-mark ${q.kind}`} aria-hidden="true">
+                        {on ? '✓' : ''}
+                      </span>
+                      <span class="choice-label">{o.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            {isMissing && (
+              <span class="error" role="alert" data-testid={`devreply.form.required.${q.id}`}>
+                {t('form.required')}
+              </span>
+            )}
+          </fieldset>
+        )
+      })}
+      {!done && (
+        <>
+          {error && (
+            <span class="error" role="alert" data-testid="devreply.form.error">
+              {error}
+            </span>
+          )}
+          <button type="button" class="btn" disabled={sending} onClick={() => void send()} data-testid="devreply.form.send">
+            {sending ? t('sending') : t('form.send')}
+          </button>
+        </>
+      )}
     </div>
   )
 }
@@ -284,8 +534,10 @@ function Buttons({
   block,
   answer,
   onAnswer,
+  schemes,
 }: {
   block: Extract<Block, { type: 'buttons' }>
+  schemes: readonly string[]
   answer: string | null | undefined
   onAnswer: (option: ButtonOption) => void
 }) {
@@ -293,7 +545,7 @@ function Buttons({
   return (
     <>
       <div class="bubble team md" data-testid="devreply.buttons.question">
-        <Markdown text={block.text} />
+        <Markdown text={block.text} schemes={schemes} />
       </div>
       <div class={`choices ${answered ? 'answered' : ''}`} role="group" aria-label={plainMarkdown(parseMarkdown(block.text))} data-testid="devreply.buttons">
         {block.options.map((o) => {

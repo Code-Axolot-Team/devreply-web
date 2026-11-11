@@ -3,6 +3,26 @@
 Released versions stay supported: the API only grows, and every released version's requests are replayed
 against the server on every change. The script tag (`/sdk/web/v0/`) always serves the latest 0.x.
 
+## 0.6.0
+
+- Removed "Start a new conversation" from a conversation opened from a topic: the user keeps writing in the open
+  conversation (or goes back). `open({ message })` from the app still starts a new one.
+
+- Link buttons (the `links` block, `min_sdk` 0.6.0): a reply can carry 1 to 3 buttons under an optional Markdown
+  intro. A click reports the tap (`POST /v1/conversations/{id}/taps`, for the team's stats and webhooks) and opens
+  the link: https in a new tab (no opener), the app's own deep-link scheme (`link_schemes` in the messenger
+  config) in place, so the app's deep-link handling does the rest. Any other scheme is never opened.
+- Markdown links may use the app's own deep-link scheme too; other custom schemes stay plain text.
+- Gifts (the `gift` block): a small wrapped-gift card with the title, one line and "Open gift", which tells the
+  server (`POST /v1/gifts/{id}/opened`) and opens the gift's link by the same rule. After the expiry the button
+  says "This gift has expired".
+- Several questions in one reply (the `form` block): single choice, any number ("Pick any") and free text,
+  sent together once with "Send answers"; a required question left open says so. Afterwards the form stays as a
+  read-only record of the answers; answered on another device (409), it reloads and shows those.
+- Offers: a promotional message carries an "Offer" label and "Don't send me offers" (`PATCH /v1/me
+  {"no_promotions": true}`), then "You won't get offers. Undo". The profile tells the current choice.
+- Older SDKs show these blocks' plain-text fallback.
+
 ## 0.5.1
 
 - An unread reply comes first: with a team reply waiting, home shows it on top ("New reply from {team}" and its

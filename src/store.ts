@@ -11,10 +11,14 @@ import {
   type Conversation,
   type Device,
   DevReplyError,
+  type FormAnswer,
+  type FormAnswers,
+  type LinkButton,
   type Message,
   type Outgoing,
   type Profile,
   SDK_VERSION,
+  linkTarget,
   plainText,
   parseConfig,
   placeholderConfig,
@@ -25,9 +29,7 @@ import { Live } from './live'
 export type Attribute = string | number | boolean | null
 export type LauncherMode = 'always' | 'unread' | 'none'
 
-/** `continued` (0.5.1): a start topic opened the user's open conversation in it, so the chat offers
- *  "Start a new conversation". */
-export type Route = { screen: 'home' } | { screen: 'chat'; conversationId: string | null; category: Category | null; continued?: boolean }
+export type Route = { screen: 'home' } | { screen: 'chat'; conversationId: string | null; category: Category | null }
 
 type Listener = () => void
 
@@ -395,9 +397,34 @@ export class Store {
   }
 
   async saveProfile(patch: { name?: string; email?: string }) {
-    const { name, email } = await this.authorized((api, t) => api.updateProfile(t, patch))
-    this.profile = { name, email }
+    const { name, email, noPromotions } = await this.authorized((api, t) => api.updateProfile(t, patch))
+    this.profile = { name, email, noPromotions }
     this.emit()
+  }
+
+  /** "Don't send me offers" and its Undo (0.6.0): shown at once, put back if the server says no. */
+  async setNoPromotions(no: boolean): Promise<void> {
+    const before = this.profile
+    if (before) this.profile = { ...before, noPromotions: no }
+    this.emit()
+    try {
+      const { name, email, noPromotions } = await this.authorized((api, t) => api.updateProfile(t, { no_promotions: no }))
+      this.profile = { name, email, noPromotions }
+    } catch {
+      if (before && this.profile) this.profile = { ...this.profile, noPromotions: before.noPromotions }
+    }
+    this.emit()
+  }
+
+  /**
+   * Opens a link from a team message (0.6.0): https in a new tab (no opener), the app's own scheme in
+   * place (the browser hands it to the app's deep-link handling). Anything else is never opened.
+   */
+  openLink(url: string): boolean {
+    const target = linkTarget(url, this.config.linkSchemes)
+    if (target === 'tab') window.open(url.trim(), '_blank', 'noopener,noreferrer')
+    else if (target === 'app') window.location.href = url.trim()
+    return target !== null
   }
 
   // ---- signed-in user (spec 03) ----
@@ -420,8 +447,8 @@ export class Store {
     const id = this.hostUserId
     if (!id || !this.client) return
     try {
-      const { name, email, restored } = await this.authorized((api, t) => api.updateProfile(t, { user_id: id }))
-      this.profile = { name, email }
+      const { name, email, noPromotions, restored } = await this.authorized((api, t) => api.updateProfile(t, { user_id: id }))
+      this.profile = { name, email, noPromotions }
       storage.set(this.userKey, id)
       this.emit()
       // Back on this device with the same account (0.5.0): the old conversations came back.
@@ -659,12 +686,6 @@ export class Store {
     this.emit()
   }
 
-  /** Swaps the screen on top (0.5.1: "Start a new conversation" from a continued one); Back still goes home. */
-  replace(route: Route) {
-    this.route = [...this.route.slice(0, -1), route]
-    this.emit()
-  }
-
   back() {
     if (this.route.length > 1) this.route = this.route.slice(0, -1)
     this.emit()
@@ -818,6 +839,69 @@ export class ConversationModel {
     if (sent) return sent.answer!.optionId
     if (this.answered.has(messageId)) return this.answered.get(messageId)
     return this.pending.find((p) => p.answer?.messageId === messageId)?.answer?.optionId
+  }
+
+  /** A link button was tapped (0.6.0): reported (never waited for), then opened. */
+  tapLink(messageId: string, link: LinkButton) {
+    const id = this.conversationId
+    if (id) void store.authorized((api, t) => api.tap(t, id, messageId, link.id)).catch(() => undefined)
+    store.openLink(link.url)
+  }
+
+  /** "Open gift" (0.6.0): the server hears it first, then the link opens (in the same tap, so the
+   *  browser allows the new tab). */
+  openGift(giftId: string, url: string) {
+    void store.authorized((api, t) => api.giftOpened(t, giftId)).catch(() => undefined)
+    store.openLink(url)
+  }
+
+  /** Forms answered from here (0.6.0), until the server's messages show the answer: `{}` when the
+   *  server said "already answered" (409) and the answer isn't in the list. */
+  private formsAnswered = new Map<string, FormAnswer>()
+  private formsSending = new Set<string>()
+
+  /** The answer to a form: from the user's answer message, or sent from here; undefined while open. */
+  formAnswerTo(messageId: string): FormAnswer | undefined {
+    const sent = this.messages.find((m) => m.author === 'user' && m.formAnswer?.messageId === messageId)
+    return sent?.formAnswer ?? this.formsAnswered.get(messageId)
+  }
+
+  isSendingForm(messageId: string): boolean {
+    return this.formsSending.has(messageId)
+  }
+
+  /**
+   * Sends a form's answers once (0.6.0). Resolves null when sent (or already answered: 409 reloads
+   * and shows the server's answer), or the reason it failed (the form stays open to try again).
+   */
+  async answerForm(messageId: string, answers: FormAnswers): Promise<string | null> {
+    const id = this.conversationId
+    if (!id || this.formAnswerTo(messageId) || this.formsSending.has(messageId)) return null
+    this.formsSending.add(messageId)
+    this.emit()
+    try {
+      const m = await store.authorized((api, t) => api.answerForm(t, id, messageId, answers))
+      this.formsAnswered.set(messageId, { messageId, answers })
+      store.fire('messageSent', { conversationId: id })
+      if (m) {
+        this.add(m)
+        const c = store.conversations.find((x) => x.id === id)
+        if (c) store.upsert({ ...c, lastText: plainText(m), lastAuthor: 'user', lastMessageAt: m.createdAt, status: 'open' })
+      }
+      return null
+    } catch (e) {
+      if (e instanceof DevReplyError && e.kind === 'conflict') {
+        await this.load()
+        if (!this.formAnswerTo(messageId)) this.formsAnswered.set(messageId, { messageId, answers: {} })
+        return null
+      }
+      const kind = e instanceof DevReplyError ? e.kind : 'network'
+      if (kind === 'invalid' && e instanceof DevReplyError) return e.message.charAt(0).toUpperCase() + e.message.slice(1) + '.'
+      return kind === 'network' ? t('error.offline') : t('error.generic')
+    } finally {
+      this.formsSending.delete(messageId)
+      this.emit()
+    }
   }
 
   retry(item: Pending) {
